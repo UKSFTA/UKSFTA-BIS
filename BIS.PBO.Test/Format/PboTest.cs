@@ -3,7 +3,7 @@ using System.IO;
 using Xunit;
 using BIS.PBO;
 
-namespace BIS.PBO.Test
+namespace BIS.PBO.Test.Format
 {
     public class PboTest
     {

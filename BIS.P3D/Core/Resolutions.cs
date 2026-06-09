@@ -118,7 +118,7 @@ namespace BIS.P3D
             if (res == 21 * specialLod) return LodName.Wreck;
 
             if (res == 1000.0f) return LodName.ViewGunner;
-            if (res == 1100.0f) return LodName.ViewPilot;
+            if (Math.Abs(res - 1100.0f) < 0.01f) return LodName.ViewPilot;
             if (res == 1200.0f) return LodName.ViewCargo;
 
             if (res == 1e13f) return LodName.Geometry;
@@ -132,13 +132,16 @@ namespace BIS.P3D
         public static string GetLODName(this float res)
         {
             var lodType = res.GetLODType();
+            string name = "Unknown";
 
             if (lodType == LodName.Resolution)
-                return res.ToString("0.000");
-            if (lodType == LodName.ShadowVolume)
-                return "ShadowVolume" + (res - 10000f).ToString("0.000");
+                name = $"LOD {res:F1}";
+            else if (lodType == LodName.ShadowVolume)
+                name = "ShadowVolume" + (res - 10000f).ToString("0.000");
             else
-                return Enum.GetName(typeof(LodName), lodType);
+                name = Enum.GetName(typeof(LodName), lodType) ?? "Unknown";
+
+            return $"{name} ({res:F1})";
         }
 
         public static bool IsResolution(float r)

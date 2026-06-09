@@ -10,7 +10,7 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 case $command in
     "test")
         echo "🧪 Running Fast Unit Tests for UKSFTA-BIS..."
-        dotnet test --no-restore -c Debug
+        dotnet test -c Debug
         ;;
     "lint")
         echo "🧹 Linting & Formatting UKSFTA-BIS..."

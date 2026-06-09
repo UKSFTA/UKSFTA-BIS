@@ -4,7 +4,7 @@ using System.Numerics;
 using Xunit;
 using BIS.P3D;
 
-namespace BIS.P3D.Test
+namespace BIS.P3D.Test.Core
 {
     public class LodHashIdTests
     {

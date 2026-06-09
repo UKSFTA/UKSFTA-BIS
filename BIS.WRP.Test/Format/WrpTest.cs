@@ -1,2 +1,15 @@
 using Xunit;
-namespace BIS.WRP.Test.Format { public class WrpTest { [Fact] public void Placeholder() => Assert.True(true); } }
+using BIS.WRP;
+
+namespace BIS.WRP.Test
+{
+    public class WrpTest
+    {
+        [Fact]
+        public void Wrp_CanInitialize()
+        {
+            var wrp = new AnyWrp();
+            Assert.NotNull(wrp);
+        }
+    }
+}

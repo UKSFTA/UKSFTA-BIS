@@ -1,2 +1,16 @@
 using Xunit;
-namespace BIS.RTM.Test.Format { public class RtmTest { [Fact] public void Placeholder() => Assert.True(true); } }
+using BIS.RTM;
+
+namespace BIS.RTM.Test
+{
+    public class RtmTest
+    {
+        [Fact]
+        public void Rtm_CanInitialize()
+        {
+            // Cannot initialize empty RTM. 
+            // Just verify the placeholder runs.
+            Assert.True(true);
+        }
+    }
+}

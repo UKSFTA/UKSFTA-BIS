@@ -57,7 +57,13 @@ namespace BIS.Core.Test.Compression
             compression.Write(data, 0, data.Length);
             buffer.Seek(0, SeekOrigin.Begin);
             var result = new byte[data.Length];
-            decompression.Read(result, 0, result.Length);
+            int totalRead = 0;
+            while (totalRead < result.Length)
+            {
+                int r = decompression.Read(result, totalRead, result.Length - totalRead);
+                if (r == 0) break;
+                totalRead += r;
+            }
 
             Assert.Equal(data, result);
         }

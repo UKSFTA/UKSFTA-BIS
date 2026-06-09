@@ -56,4 +56,4 @@ The library is organized into modular namespaces, allowing projects to include o
 
 ## ⚖ License
 
-This project is licensed under the **Arma Public License - Share Alike (APL-SA)**. See the `LICENSE` file for full details.
+This project is licensed under the **MIT License**. See the `LICENSE` file for full details.

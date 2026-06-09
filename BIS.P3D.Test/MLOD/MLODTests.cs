@@ -7,7 +7,7 @@ using BIS.P3D.MLOD;
 using BIS.Core.Streams;
 using BIS.Core.Math;
 
-namespace BIS.P3D.Test
+namespace BIS.P3D.Test.MLOD
 {
     public class MLODTests
     {

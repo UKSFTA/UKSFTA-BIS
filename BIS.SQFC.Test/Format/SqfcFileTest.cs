@@ -1,6 +1,6 @@
 using BIS.Core.Streams;
 
-namespace BIS.SQFC.Test
+namespace BIS.SQFC.Test.Format
 {
     public class SqfcFileTest
     {

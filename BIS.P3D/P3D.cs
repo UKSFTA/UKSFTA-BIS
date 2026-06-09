@@ -11,6 +11,10 @@ namespace BIS.P3D
     {
         private MLOD.MLOD editable;
         private ODOL.ODOL binarized;
+        
+        public P3D(Stream stream) : this(new BinaryReaderEx(stream)) { }
+        
+        public P3D(BinaryReaderEx input) { Read(input); }
 
         public IModelInfo ModelInfo => 
             binarized?.ModelInfo 
@@ -23,6 +27,8 @@ namespace BIS.P3D
         public bool IsEditable =>  editable != null;
 
         public int Version => binarized?.Version ?? editable.Version;
+        
+        public float Mass => binarized?.ModelInfo.Mass ?? 0.0f; // Simplified mapping
 
         public static bool IsODOL(string filePath)
         {

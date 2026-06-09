@@ -47,8 +47,8 @@ namespace BIS.Core.Streams
 
         public void WriteAsciiz(string text)
         {
-            Write(text.ToCharArray());
-            Write(char.MinValue);
+            Write(Encoding.ASCII.GetBytes(text));
+            Write((byte)0);
         }
 
 

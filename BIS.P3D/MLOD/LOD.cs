@@ -16,6 +16,13 @@ namespace BIS.P3D.MLOD
         public Face[] Faces { get; set; }
         public LinkedList<Tagg> Taggs { get; private set; }
         public float Resolution { get; private set; }
+        public string[] Textures => Faces.Select(f => f.Texture).Distinct().ToArray();
+        public string[] Selections => NamedSelections.Select(ns => ns.Name).ToArray();
+        public string[] Proxies => new string[0]; // MLOD proxies structure differs, returning empty
+
+        public string Name => Resolution.ToString("F1");
+        
+        Vector3P[] ILevelOfDetail.Points => Points.Select(p => (Vector3P)p).ToArray();
 
         public IEnumerable<Tuple<string, string>> NamedProperties => Taggs.OfType<PropertyTagg>().Select(p => new Tuple<string, string>(p.PropertyName.Trim('\0',' '), p.Value.Trim('\0', ' ')));
 

@@ -64,10 +64,10 @@ namespace BIS.P3D.MLOD
                     Vertices[i].Write(output);
                 else
                 {
-                    output.Write(0);
-                    output.Write(0);
-                    output.Write(0);
-                    output.Write(0);
+                    output.Write(0); // PointIndex
+                    output.Write(0); // NormalIndex
+                    output.Write(0f); // U
+                    output.Write(0f); // V
                 }
 
             output.Write((int)Flags);

@@ -16,7 +16,7 @@ namespace BIS.P3D.ODOL
 
             Resolution = resolution;
             LoadableLodInfo = loadableLodInfo;
-			Proxies = input.ReadArray(i => new Proxy(i, version));
+			RawProxies = input.ReadArray(i => new Proxy(i, version));
 			SubSkeletonsToSkeleton = input.ReadIntArray();
 			SkeletonToSubSkeleton = input.ReadArray(i => new SubSkeletonIndexSet(i));
 			if (version >= 50u)
@@ -126,7 +126,7 @@ namespace BIS.P3D.ODOL
 
 		public float Resolution { get; }
         internal LoadableLodInfo LoadableLodInfo { get; }
-		internal Proxy[] Proxies { get; }
+		internal Proxy[] RawProxies { get; }
         public int[] SubSkeletonsToSkeleton { get; }
 		internal SubSkeletonIndexSet[] SkeletonToSubSkeleton { get; }
         public uint VertexCount { get; }
@@ -139,6 +139,8 @@ namespace BIS.P3D.ODOL
         public Vector3P BCenter { get; }
         public float BRadius { get; }
         public string[] Textures { get; }
+        public string[] Selections => NamedSelections.Select(ns => ns.Name).ToArray();
+        string[] ILevelOfDetail.Proxies => RawProxies.Select(p => NamedSelections[p.NamedSelectionIndex].Name).ToArray();
 		public EmbeddedMaterial[] Materials { get; }
         public TrackedArray<int> PointToVertex { get; }
         public TrackedArray<int> VertexToPoint { get; }
@@ -171,7 +173,7 @@ namespace BIS.P3D.ODOL
 
 		internal void Write(BinaryWriterEx output, int version)
 		{
-			output.WriteArray(Proxies, (o,v) => v.Write(o, version));
+			output.WriteArray(RawProxies, (o,v) => v.Write(o, version));
 			output.WriteArray(SubSkeletonsToSkeleton);
 			output.WriteArray(SkeletonToSubSkeleton, (o, v) => v.Write(o, version));
 			if (version >= 50u)
@@ -253,12 +255,17 @@ namespace BIS.P3D.ODOL
 			}
 		}
 
+        public string Name => Resolution.ToString("F1");
+
+        public Vector3P[] Points => Vertices.Select(v => (Vector3P)v).ToArray();
+
         public IEnumerable<string> GetTextures()
+
         {
-			return Textures
-				.Concat(Materials.SelectMany(m => m.StageTextures).Select(st => st.Texture))
-				.Concat(Materials.Where(m => m.StageTI != null).Select(m => m.StageTI.Texture))
-				.Distinct();
+                        return Textures
+                                .Concat(Materials.SelectMany(m => m.StageTextures).Select(st => st.Texture))
+                                .Concat(Materials.Where(m => m.StageTI != null).Select(m => m.StageTI.Texture))
+                                .Distinct();
         }
 
         public IEnumerable<string> GetMaterials()

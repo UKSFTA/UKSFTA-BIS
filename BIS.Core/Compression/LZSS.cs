@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.IO;
 
 namespace BIS.Core.Compression
 {
@@ -77,7 +78,13 @@ namespace BIS.Core.Compression
             }
 
             var csData = new byte[4];
-            input.Read(csData,0,4);
+            int bytesRead = 0;
+            while (bytesRead < 4)
+            {
+                int read = input.Read(csData, bytesRead, 4 - bytesRead);
+                if (read == 0) throw new EndOfStreamException("Unexpected end of stream");
+                bytesRead += read;
+            }
             int csr = BitConverter.ToInt32(csData, 0);
 
             if( csr!=csum )

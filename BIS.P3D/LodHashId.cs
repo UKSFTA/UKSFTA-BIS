@@ -89,7 +89,7 @@ namespace BIS.P3D
             var cube8Bytes = To1Bit(cube8x);
 
             // Generate a HASH using SHA256 on each dataset
-            using (var sha = new SHA256Managed())
+            using (var sha = SHA256.Create())
             {
                 return new LodHashId(sha.ComputeHash(all15), sha.ComputeHash(cube8Bytes), normalized.Count);
             }

@@ -684,7 +684,7 @@ namespace System.IO.Compression
 
             public int Decode(byte[] array, int offset, int count, Stream stream)    /* Just the reverse of Encode(). */
             {
-                int i, j, k, c;
+                int i, j, c;
                 var flags = 0U;
                 int r = _lzssOption.N - _lzssOption.F;
                 var stopPos = count + offset;

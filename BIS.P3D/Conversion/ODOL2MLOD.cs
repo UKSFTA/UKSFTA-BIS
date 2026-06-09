@@ -15,9 +15,12 @@ namespace BIS.P3D.Conversion
 
             foreach (var lod in odol.Lods)
             {
-                try {
+                try
+                {
                     lods.Add(ConvertLod(lod));
-                } catch (Exception ex) {
+                }
+                catch (Exception ex)
+                {
                     Console.WriteLine($" [Debug] Failed converting LOD: {ex.Message}");
                     throw;
                 }
@@ -29,7 +32,7 @@ namespace BIS.P3D.Conversion
         private static BIS.P3D.MLOD.P3DM_LOD ConvertLod(BIS.P3D.ODOL.LOD odolLod)
         {
             var vertices = odolLod.Vertices;
-            
+
             // Map Normals (handle both normal and compressed)
             Vector3P[] normals;
             if (odolLod.Normals != null && odolLod.Normals.Count > 0)
@@ -44,7 +47,7 @@ namespace BIS.P3D.Conversion
             {
                 normals = new Vector3P[0];
             }
-            
+
             var points = new Point[vertices.Count];
             for (int i = 0; i < vertices.Count; i++)
             {
@@ -62,10 +65,10 @@ namespace BIS.P3D.Conversion
                 {
                     var uvs = odolLod.UvSets[i].GetUV();
                     var faceUVs = new float[faces.Length][,];
-                    for(int f=0; f<faces.Length; f++)
+                    for (int f = 0; f < faces.Length; f++)
                     {
                         faceUVs[f] = new float[faces[f].VertexCount, 2];
-                        for(int v=0; v<faces[f].VertexCount; v++)
+                        for (int v = 0; v < faces[f].VertexCount; v++)
                         {
                             var vIdx = faces[f].Vertices[v].PointIndex;
                             if (uvs != null && vIdx < uvs.Length)
@@ -89,7 +92,7 @@ namespace BIS.P3D.Conversion
                     taggs.Add(new NamedSelectionTagg(selection.Name, pointsSelection, facesSelection));
                 }
             }
-            
+
             // Map Properties
             if (odolLod.NamedProperties != null)
             {
@@ -110,7 +113,7 @@ namespace BIS.P3D.Conversion
             var mlodFaces = new List<BIS.P3D.MLOD.Face>();
 
             if (odolLod.Sections == null) return mlodFaces.ToArray();
-            if (odolLod.Polygons == null) 
+            if (odolLod.Polygons == null)
             {
                 return mlodFaces.ToArray();
             }
@@ -119,16 +122,16 @@ namespace BIS.P3D.Conversion
             {
                 var uvs = (odolLod.UvSets != null && odolLod.UvSets.Length > 0) ? odolLod.UvSets[0].GetUV() : null;
                 var facesInSection = section.GetFaces(odolLod.Polygons.Faces);
-                
-                if (facesInSection == null) 
+
+                if (facesInSection == null)
                 {
                     continue;
                 }
-                
+
                 foreach (var odolFace in facesInSection)
                 {
                     var vertexCount = odolFace.VertexIndices.Length;
-                    
+
                     var mlodVertices = new BIS.P3D.MLOD.Vertex[4]; // MLOD faces seem to expect 4 vertices in the structure
                     for (int i = 0; i < 4; i++)
                     {
@@ -138,12 +141,12 @@ namespace BIS.P3D.Conversion
                             int normalIdx = vIdx;
                             if (odolLod.Normals != null && normalIdx >= odolLod.Normals.Count)
                             {
-                                normalIdx = 0; 
+                                normalIdx = 0;
                             }
                             mlodVertices[i] = new BIS.P3D.MLOD.Vertex(
-                                vIdx, 
+                                vIdx,
                                 normalIdx,
-                                (uvs != null && vIdx < uvs.Length) ? uvs[vIdx].X : 0, 
+                                (uvs != null && vIdx < uvs.Length) ? uvs[vIdx].X : 0,
                                 (uvs != null && vIdx < uvs.Length) ? uvs[vIdx].Y : 0
                             );
                         }
@@ -152,10 +155,10 @@ namespace BIS.P3D.Conversion
                             mlodVertices[i] = new BIS.P3D.MLOD.Vertex(0, 0, 0, 0);
                         }
                     }
-                    
+
                     string texture = (odolLod.Textures != null && section.TextureIndex >= 0 && section.TextureIndex < odolLod.Textures.Length) ? odolLod.Textures[section.TextureIndex] : "";
                     string material = (odolLod.Materials != null && section.MaterialIndex >= 0 && section.MaterialIndex < odolLod.Materials.Length) ? odolLod.Materials[section.MaterialIndex].MaterialName : (section.Material ?? "");
-                    
+
                     mlodFaces.Add(new BIS.P3D.MLOD.Face(vertexCount, mlodVertices, BIS.P3D.MLOD.FaceFlags.DEFAULT, texture, material));
                 }
             }

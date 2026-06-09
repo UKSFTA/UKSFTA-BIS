@@ -150,12 +150,12 @@ namespace BIS.P3D.MLOD
     {
         public float[] Mass { get; set; }
 
-        public MassTagg(float[] mass): base((uint)(mass.Length * 4), "#Mass#")
+        public MassTagg(float[] mass) : base((uint)(mass.Length * 4), "#Mass#")
         {
             Mass = mass;
         }
 
-        public MassTagg(BinaryReaderEx input): base(input)
+        public MassTagg(BinaryReaderEx input) : base(input)
         {
             Read(input);
         }
@@ -227,7 +227,7 @@ namespace BIS.P3D.MLOD
         public string PropertyName { get; set; }
         public string Value { get; set; }
 
-        public PropertyTagg(string prop, string val) : base(128,"#Property#")
+        public PropertyTagg(string prop, string val) : base(128, "#Property#")
         {
             PropertyName = prop;
             Value = val;
@@ -332,7 +332,7 @@ namespace BIS.P3D.MLOD
         public int UvSetNr { get; set; }
         public float[][,] FaceUVs { get; set; }
 
-        public UVSetTagg(uint dataSize, int uvNr, float[][,] uvs): base(dataSize, "#UVSet#")
+        public UVSetTagg(uint dataSize, int uvNr, float[][,] uvs) : base(dataSize, "#UVSet#")
         {
             UvSetNr = uvNr;
             FaceUVs = uvs;
@@ -383,9 +383,9 @@ namespace BIS.P3D.MLOD
 
     public class EOFTagg : Tagg
     {
-        public EOFTagg(): base(0, "#EndOfFile#") {}
+        public EOFTagg() : base(0, "#EndOfFile#") { }
 
-        public EOFTagg(BinaryReaderEx input) : base(input) {}
+        public EOFTagg(BinaryReaderEx input) : base(input) { }
 
         public override void Write(BinaryWriterEx output)
         {

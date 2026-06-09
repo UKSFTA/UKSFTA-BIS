@@ -24,7 +24,7 @@ namespace BIS.P3D.ODOL
 
             if (version >= 69)
             {
-                output.WriteArrayBase(VertexIndices, (o,v) => o.Write(v));
+                output.WriteArrayBase(VertexIndices, (o, v) => o.Write(v));
             }
             else
             {

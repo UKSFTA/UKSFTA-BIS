@@ -12,7 +12,7 @@ namespace BIS.Core.Streams
             return ms;
         }
 
-        public static T Read<T> (Stream input) where T : IReadObject, new()
+        public static T Read<T>(Stream input) where T : IReadObject, new()
         {
             var o = new T();
             o.Read(new BinaryReaderEx(MakeBuffer(input)));
@@ -21,7 +21,7 @@ namespace BIS.Core.Streams
 
         public static T Read<T>(string filename) where T : IReadObject, new()
         {
-            using(var input = File.OpenRead(filename))
+            using (var input = File.OpenRead(filename))
             {
                 return Read<T>(input);
             }

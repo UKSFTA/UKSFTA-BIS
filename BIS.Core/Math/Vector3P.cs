@@ -49,7 +49,7 @@ namespace BIS.Core.Math
 
         public Vector3P(float x, float y, float z)
         {
-            xyz = new Vector3( x, y, z );
+            xyz = new Vector3(x, y, z);
         }
 
         public Vector3P(Vector3 xyz)
@@ -65,7 +65,7 @@ namespace BIS.Core.Math
         {
             get
             {
-                switch(i)
+                switch (i)
                 {
                     case 0: return X;
                     case 1: return Y;

@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 namespace BIS.Core
 {
     public class QuadTree<TElement> : IEnumerable<TElement>, IReadOnlyList<TElement>
-    {           
+    {
         /// <summary>
         /// how many elements exist in X-dimension
         /// </summary>
@@ -70,7 +70,7 @@ namespace BIS.Core
                                      select Get(x, y);
 
             flag = input.ReadBoolean();
-            
+
             if (flag)
             {
                 root = new QuadTreeNode(input);
@@ -83,9 +83,9 @@ namespace BIS.Core
 
         public TElement Get(int x, int y)
         {
-            if (x < 0 || x >= sizeX) 
+            if (x < 0 || x >= sizeX)
                 throw new ArgumentOutOfRangeException("x");
-            if (y < 0 || y >= sizeY) 
+            if (y < 0 || y >= sizeY)
                 throw new ArgumentOutOfRangeException("y");
 
             uint shiftedX = (uint)(x << (8 * sizeof(int) - logSizeTotalX)); // make highest bits accessible on left side
@@ -117,7 +117,7 @@ namespace BIS.Core
                 y >>= 1;
             }
 
-            switch(elementSize)
+            switch (elementSize)
             {
                 case 1:
                     leafLogSizeX = 1;
@@ -134,7 +134,7 @@ namespace BIS.Core
 
                 default: throw new ArgumentException("Element size needs to be 1, 2 or 4");
             }
-            
+
             // optimize _logSizeTotalX, _logSizeTotalY
             int numLevelsX = (logSizeTotalX - leafLogSizeX + logSizeX - 1) / logSizeX;
             int numLevelsY = (logSizeTotalY - leafLogSizeY + logSizeY - 1) / logSizeY;
@@ -228,13 +228,13 @@ namespace BIS.Core
 
             public QuadTreeLeaf(BinaryReader input)
             {
-                if(getFunc == null)
+                if (getFunc == null)
                 {
-                    switch(elementSize)
+                    switch (elementSize)
                     {
                         case 1: getFunc = (src, x, y) => readElement(src, 0); break;
-                        case 2: getFunc = (src, x, y) => readElement(src, x*2); break;
-                        case 4: getFunc = (src, x, y) => readElement(src, (y<<1) + x); break;
+                        case 2: getFunc = (src, x, y) => readElement(src, x * 2); break;
+                        case 4: getFunc = (src, x, y) => readElement(src, (y << 1) + x); break;
                     }
                 }
 

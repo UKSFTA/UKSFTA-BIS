@@ -56,8 +56,8 @@ namespace BIS.Core
 
         public byte A8 => (byte)((value >> 24) & 0xff);
         public byte R8 => (byte)((value >> 16) & 0xff);
-        public byte G8 => (byte)((value >>  8) & 0xff);
-        public byte B8 => (byte)((value      ) & 0xff);
+        public byte G8 => (byte)((value >> 8) & 0xff);
+        public byte B8 => (byte)((value) & 0xff);
 
         public PackedColor(uint value)
         {
@@ -69,7 +69,7 @@ namespace BIS.Core
             output.Write(value);
         }
 
-        public PackedColor(byte r, byte g, byte b, byte a=255)
+        public PackedColor(byte r, byte g, byte b, byte a = 255)
         {
             value = PackColor(r, g, b, a);
         }

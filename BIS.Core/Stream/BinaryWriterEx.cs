@@ -29,7 +29,7 @@ namespace BIS.Core.Streams
 
         public BinaryWriterEx(Stream dstStream) : base(dstStream, Encoding.ASCII) { }
 
-        public BinaryWriterEx(Stream dstStream, bool leaveOpen): base(dstStream, Encoding.ASCII, leaveOpen) {}
+        public BinaryWriterEx(Stream dstStream, bool leaveOpen) : base(dstStream, Encoding.ASCII, leaveOpen) { }
 
         public void WriteAscii(string text, uint len)
         {
@@ -193,7 +193,7 @@ namespace BIS.Core.Streams
                 }
                 Write(BitConverter.GetBytes(csum));
             }
-            
+
         }
 
         public void WriteUInt24(uint length)
@@ -210,7 +210,7 @@ namespace BIS.Core.Streams
 
         public void WriteUshorts(ushort[] elements)
         {
-            WriteArrayBase(elements, (r,e) => r.Write(e));
+            WriteArrayBase(elements, (r, e) => r.Write(e));
         }
         public void Write(Vector3 value)
         {
@@ -242,7 +242,7 @@ namespace BIS.Core.Streams
             }
         }
 
-        public void WriteCondensedArray<T>(T[] array, Action<BinaryWriterEx, T> write, int sizeOf) 
+        public void WriteCondensedArray<T>(T[] array, Action<BinaryWriterEx, T> write, int sizeOf)
             where T : IEquatable<T>
         {
 

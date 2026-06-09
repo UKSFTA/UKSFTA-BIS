@@ -23,7 +23,7 @@ namespace BIS.Core.Math
             return new QuaternionP(x, y, z, w);
         }
 
-        public QuaternionP() 
+        public QuaternionP()
             : this(System.Numerics.Quaternion.Identity)
         {
         }
@@ -71,7 +71,7 @@ namespace BIS.Core.Math
         /// <returns></returns>
         public Matrix4P ToRotationMatrix()
         {
-            return new Matrix4P(Matrix4x4.CreateFromQuaternion(quaternion)); 
+            return new Matrix4P(Matrix4x4.CreateFromQuaternion(quaternion));
         }
     }
 }

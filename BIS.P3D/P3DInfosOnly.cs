@@ -9,11 +9,11 @@ namespace BIS.P3D
         private MLOD.MLOD editable;
         private ODOL.ODOL binarized;
 
-        public IModelInfo ModelInfo => 
-            binarized?.ModelInfo 
+        public IModelInfo ModelInfo =>
+            binarized?.ModelInfo
             ?? editable.ModelInfo;
 
-        public bool IsEditable =>  editable != null;
+        public bool IsEditable => editable != null;
 
         public int Version => binarized?.Version ?? editable.Version;
 

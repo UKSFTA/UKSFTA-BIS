@@ -32,59 +32,59 @@ namespace BIS.Core.Compression
                 #endregion
             }
 
-            B_3:
-                #region B_3
-                t = *ip++;
-                if (t >= 16) goto match;
-                #endregion
-                #region B_4
-                if (t == 0)
+        B_3:
+            #region B_3
+            t = *ip++;
+            if (t >= 16) goto match;
+            #endregion
+            #region B_4
+            if (t == 0)
+            {
+                while (*ip == 0)
                 {
-                    while (*ip == 0)
-                    {
-                        t += 255;
-                        ip++;
-                    }
-                    t += 15U + *ip++;
+                    t += 255;
+                    ip++;
                 }
-                Debug.Assert(t > 0);
-                if ((op_end - op) < (t + 3)) throw new OverflowException("Output Overrun");
+                t += 15U + *ip++;
+            }
+            Debug.Assert(t > 0);
+            if ((op_end - op) < (t + 3)) throw new OverflowException("Output Overrun");
 
-                *(uint*)(op) = *(uint*)(ip);
-                op += 4; ip += 4;
-                if (--t > 0)
+            *(uint*)(op) = *(uint*)(ip);
+            op += 4; ip += 4;
+            if (--t > 0)
+            {
+                if (t >= 4)
                 {
-                    if (t >= 4)
+                    do
                     {
-                        do
-                        {
-                            *(uint*)(op) = *(uint*)(ip);
-                            op += 4; ip += 4; t -= 4;
-                        } while (t >= 4);
-                        if (t > 0) do *op++ = *ip++; while (--t > 0);
-                    }
-                    else
-                        do *op++ = *ip++; while (--t > 0);
+                        *(uint*)(op) = *(uint*)(ip);
+                        op += 4; ip += 4; t -= 4;
+                    } while (t >= 4);
+                    if (t > 0) do *op++ = *ip++; while (--t > 0);
                 }
-                #endregion
+                else
+                    do *op++ = *ip++; while (--t > 0);
+            }
+            #endregion
 
-                #region f_l_r
-            first_literal_run:
-                t = *ip++;
-                if (t >= 16) goto match;
-                #endregion
+            #region f_l_r
+        first_literal_run:
+            t = *ip++;
+            if (t >= 16) goto match;
+            #endregion
 
-                #region B_5
-                m_pos = op - (1 + M2_MAX_OFFSET);
-                m_pos -= t >> 2;
-                m_pos -= *ip++ << 2;
+            #region B_5
+            m_pos = op - (1 + M2_MAX_OFFSET);
+            m_pos -= t >> 2;
+            m_pos -= *ip++ << 2;
 
-                if (m_pos < output || m_pos >= op) throw new OverflowException("Lookbehind Overrun");
-                if ((op_end - op) < (3)) throw new OverflowException("Output Overrun");
-                *op++ = *m_pos++; *op++ = *m_pos++; *op++ = *m_pos;
+            if (m_pos < output || m_pos >= op) throw new OverflowException("Lookbehind Overrun");
+            if ((op_end - op) < (3)) throw new OverflowException("Output Overrun");
+            *op++ = *m_pos++; *op++ = *m_pos++; *op++ = *m_pos;
 
-                goto match_done;
-                #endregion
+            goto match_done;
+            #endregion
 
         match:
             if (t >= 64)
@@ -278,7 +278,7 @@ namespace BIS.Core.Compression
                         *op++ = next(i);
                         *op++ = next(i);
                         *op++ = next(i);
-                        *op++ = next(i); 
+                        *op++ = next(i);
                         t -= 4;
                     } while (t >= 4);
                     if (t > 0) do *op++ = next(i); while (--t > 0);
@@ -327,7 +327,7 @@ namespace BIS.Core.Compression
                 }
 
                 m_pos = op - 1;
-                m_pos -= (ip(i,0) >> 2) + (ip(i,1) << 6);
+                m_pos -= (ip(i, 0) >> 2) + (ip(i, 1) << 6);
 
                 i.Position += 2;
             }
@@ -347,7 +347,7 @@ namespace BIS.Core.Compression
                     t += 7U + next(i);
                 }
 
-                m_pos -= (ip(i,0) >> 2) + (ip(i,1) << 6);
+                m_pos -= (ip(i, 0) >> 2) + (ip(i, 1) << 6);
 
                 i.Position += 2;
 
@@ -358,7 +358,7 @@ namespace BIS.Core.Compression
                     Debug.Assert(t == 1);
                     if (m_pos != op_end)
                         throw new OverflowException("Output Underrun");
-                    return (uint)(i.Position-startPos);
+                    return (uint)(i.Position - startPos);
                 }
                 m_pos -= 0x4000;
             }
@@ -416,7 +416,7 @@ namespace BIS.Core.Compression
             dst = new byte[expectedSize];
             fixed (byte* output = &dst[0])
             {
-                return Decompress(input,output,expectedSize);
+                return Decompress(input, output, expectedSize);
             }
         }
 

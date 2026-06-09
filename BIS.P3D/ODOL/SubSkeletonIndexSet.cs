@@ -11,9 +11,9 @@ namespace BIS.P3D.ODOL
 
         public int[] SubSkeletons { get; }
 
-		public void Write(BinaryWriterEx output, int version)
-		{
-			output.WriteArray(SubSkeletons);
-		}
-	}
+        public void Write(BinaryWriterEx output, int version)
+        {
+            output.WriteArray(SubSkeletons);
+        }
+    }
 }

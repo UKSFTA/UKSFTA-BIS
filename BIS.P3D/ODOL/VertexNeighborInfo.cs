@@ -6,13 +6,13 @@ namespace BIS.P3D.ODOL
     {
         public VertexNeighborInfo(BinaryReaderEx input)
         {
-			PosA = input.ReadUInt16();
-			Unused1 = input.ReadBytes(2);
-			RtwA = new AnimationRTWeight(input);
-			PosB = input.ReadUInt16();
-			Unused2 = input.ReadBytes(2);
-			RtwB = new AnimationRTWeight(input);
-		}
+            PosA = input.ReadUInt16();
+            Unused1 = input.ReadBytes(2);
+            RtwA = new AnimationRTWeight(input);
+            PosB = input.ReadUInt16();
+            Unused2 = input.ReadBytes(2);
+            RtwB = new AnimationRTWeight(input);
+        }
 
         public ushort PosA { get; }
         public byte[] Unused1 { get; }

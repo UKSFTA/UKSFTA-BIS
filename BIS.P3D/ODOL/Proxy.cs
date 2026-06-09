@@ -7,29 +7,29 @@ namespace BIS.P3D.ODOL
     {
         public Proxy(BinaryReaderEx input, int version)
         {
-			ProxyModel = input.ReadAsciiz();
-			Transformation = new Matrix4P(input);
-			SequenceID = input.ReadInt32();
-			NamedSelectionIndex = input.ReadInt32();
-			BoneIndex = input.ReadInt32();
-			if (version >= 40)
-			{
-				SectionIndex = input.ReadInt32();
-			}
-		}
+            ProxyModel = input.ReadAsciiz();
+            Transformation = new Matrix4P(input);
+            SequenceID = input.ReadInt32();
+            NamedSelectionIndex = input.ReadInt32();
+            BoneIndex = input.ReadInt32();
+            if (version >= 40)
+            {
+                SectionIndex = input.ReadInt32();
+            }
+        }
 
         public void Write(BinaryWriterEx output, int version)
         {
-			output.WriteAsciiz(ProxyModel);
-			Transformation.Write(output);
-			output.Write(SequenceID );
-			output.Write(NamedSelectionIndex);
-			output.Write(BoneIndex);
-			if (version >= 40)
-			{
-				output.Write(SectionIndex);
-			}
-		}
+            output.WriteAsciiz(ProxyModel);
+            Transformation.Write(output);
+            output.Write(SequenceID);
+            output.Write(NamedSelectionIndex);
+            output.Write(BoneIndex);
+            if (version >= 40)
+            {
+                output.Write(SectionIndex);
+            }
+        }
 
         public int SectionIndex { get; }
         public string ProxyModel { get; }

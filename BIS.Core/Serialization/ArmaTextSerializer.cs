@@ -46,7 +46,7 @@ namespace BIS.Core.Serialization
             }
             throw new ArgumentException($"Sorry, type '{obj.GetType().FullName}' is not supported");
         }
-        
+
         private static string Escape(string str)
         {
             return str.Replace("\"", "\"\"");
@@ -82,7 +82,7 @@ namespace BIS.Core.Serialization
         public static string ToSimpleArrayString(IEnumerable list)
         {
             var sb = new StringBuilder("[");
-            foreach(var item in list)
+            foreach (var item in list)
             {
                 if (sb.Length > 1)
                 {

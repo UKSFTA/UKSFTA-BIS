@@ -33,7 +33,7 @@ namespace BIS.Core.Streams
 
         public bool HasReachedEnd => BaseStream.Position == BaseStream.Length;
 
-        public BinaryReaderEx(Stream stream): base(stream)
+        public BinaryReaderEx(Stream stream) : base(stream)
         {
             UseCompressionFlag = false;
         }
@@ -128,7 +128,7 @@ namespace BIS.Core.Streams
         }
 
         public short[] ReadCompressedShortArray() => ReadCompressedArray(i => i.ReadInt16(), 2);
-        public int[] ReadCompressedIntArray() => ReadCompressedArray(i => i.ReadInt32(), 4);        
+        public int[] ReadCompressedIntArray() => ReadCompressedArray(i => i.ReadInt32(), 4);
         public float[] ReadCompressedFloatArray() => ReadCompressedArray(i => i.ReadSingle(), 4);
         public byte[] ReadCompressedByteArray() => ReadCompressedArray(i => i.ReadByte(), 1);
 
@@ -270,10 +270,10 @@ namespace BIS.Core.Streams
         {
             var result = new byte[expectedSize];
             int outputI = 0;
-            for(int i=0;i<bytesToRead;i++)
+            for (int i = 0; i < bytesToRead; i++)
             {
                 var b = ReadByte();
-                if( (b & 128) != 0 )
+                if ((b & 128) != 0)
                 {
                     byte n = (byte)(b - 127);
                     byte value = ReadByte();

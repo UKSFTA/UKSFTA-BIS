@@ -40,7 +40,7 @@ namespace BIS.Core.Config
         {
             var entryType = (EntryType)input.ReadByte();
 
-            switch(entryType)
+            switch (entryType)
             {
                 case EntryType.Class:
                     return new ParamClass(input);
@@ -87,7 +87,7 @@ namespace BIS.Core.Config
             Entries = entries.ToList();
         }
 
-        public ParamClass(string name, IEnumerable<ParamEntry> entries): this(name, "", entries) { }
+        public ParamClass(string name, IEnumerable<ParamEntry> entries) : this(name, "", entries) { }
 
         public ParamClass(string name, params ParamEntry[] entries) : this(name, (IEnumerable<ParamEntry>)entries) { }
 
@@ -186,7 +186,7 @@ $@"{classHead}
             Array = new RawArray(values);
         }
 
-        public ParamArray(string name, params RawValue[] values): this(name, (IEnumerable < RawValue >)values) { }
+        public ParamArray(string name, params RawValue[] values) : this(name, (IEnumerable<RawValue>)values) { }
 
         public T[] ToArray<T>()
         {
@@ -268,7 +268,7 @@ $@"{classHead}
             Value = new RawValue(input, subtype);
         }
 
-        public override string ToString(int indentionLevel=0)
+        public override string ToString(int indentionLevel = 0)
         {
             return $"{new string(' ', indentionLevel * 4)}{Name}={Value.ToString()};";
         }

@@ -103,7 +103,7 @@ namespace BIS.P3D
             {
                 cube8.Set(i, cube8x[i] > avg);
             }
-            var cube8Bytes = new byte[cube8x.Length/8];
+            var cube8Bytes = new byte[cube8x.Length / 8];
             cube8.CopyTo(cube8Bytes, 0);
             return cube8Bytes;
         }

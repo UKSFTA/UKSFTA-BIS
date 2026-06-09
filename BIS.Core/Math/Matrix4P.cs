@@ -20,7 +20,8 @@ namespace BIS.Core.Math
                 input.ReadSingle(), input.ReadSingle(), input.ReadSingle(), 0f,
                 input.ReadSingle(), input.ReadSingle(), input.ReadSingle(), 0f,
                 input.ReadSingle(), input.ReadSingle(), input.ReadSingle(), 1f)
-            ) { 
+            )
+        {
         }
 
         public Matrix4P(System.Numerics.Matrix4x4 matrix)
@@ -53,10 +54,10 @@ namespace BIS.Core.Math
             output.Write(matrix.M43);
         }
 
-        public System.Numerics.Matrix4x4 Matrix 
-        { 
-            get { return matrix; } 
-            set { matrix = value; } 
+        public System.Numerics.Matrix4x4 Matrix
+        {
+            get { return matrix; }
+            set { matrix = value; }
         }
 
         public float Altitude

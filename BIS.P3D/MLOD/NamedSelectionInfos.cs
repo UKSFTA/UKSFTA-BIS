@@ -20,7 +20,7 @@ namespace BIS.P3D.MLOD
 
         public string Texture => OneOrNone(Faces.Select(f => f.Texture).Distinct());
 
-        private IEnumerable<Face> Faces => nst.Faces.Where(b => b != 0).Select((_,i) => lod.Faces[i]);
+        private IEnumerable<Face> Faces => nst.Faces.Where(b => b != 0).Select((_, i) => lod.Faces[i]);
 
         private static string OneOrNone(IEnumerable<string> enumerable)
         {

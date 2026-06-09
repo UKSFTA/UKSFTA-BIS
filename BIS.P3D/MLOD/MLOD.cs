@@ -14,7 +14,7 @@ namespace BIS.P3D.MLOD
         public IModelInfo ModelInfo => new ComputedModelInfo(this);
 
         public MLOD(string fileName)
-            : this(File.OpenRead(fileName)) 
+            : this(File.OpenRead(fileName))
         {
         }
 
@@ -23,7 +23,7 @@ namespace BIS.P3D.MLOD
             Read(new BinaryReaderEx(stream));
         }
 
-        public MLOD(P3DM_LOD[] lods) 
+        public MLOD(P3DM_LOD[] lods)
         {
             Version = 257;
             Lods = lods;
@@ -60,7 +60,7 @@ namespace BIS.P3D.MLOD
                 Lods[index].Write(output);
         }
 
-        public void WriteToFile(string file, bool allowOverwriting=false)
+        public void WriteToFile(string file, bool allowOverwriting = false)
         {
             var mode = (allowOverwriting) ? FileMode.Create : FileMode.CreateNew;
 

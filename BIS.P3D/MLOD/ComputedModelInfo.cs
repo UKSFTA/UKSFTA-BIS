@@ -23,7 +23,7 @@ namespace BIS.P3D.MLOD
                 points.Max(p => p.Z));
 
             var pair = mLOD.Lods.SelectMany(l => l.NamedProperties.Where(n => string.Equals(n.Item1, "map", StringComparison.OrdinalIgnoreCase))).FirstOrDefault();
-            if ( pair != null )
+            if (pair != null)
             {
                 MapType = DecodeMapType(pair.Item2);
             }
@@ -42,7 +42,7 @@ namespace BIS.P3D.MLOD
         {
             switch (value.ToLowerInvariant().Trim())
             {
-                case "tree": 
+                case "tree":
                     return MapType.Tree;
                 case "small tree":
                     return MapType.SmallTree;

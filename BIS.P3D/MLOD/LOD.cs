@@ -21,10 +21,10 @@ namespace BIS.P3D.MLOD
         public string[] Proxies => new string[0]; // MLOD proxies structure differs, returning empty
 
         public string Name => Resolution.ToString("F1");
-        
+
         Vector3P[] ILevelOfDetail.Points => Points.Select(p => (Vector3P)p).ToArray();
 
-        public IEnumerable<Tuple<string, string>> NamedProperties => Taggs.OfType<PropertyTagg>().Select(p => new Tuple<string, string>(p.PropertyName.Trim('\0',' '), p.Value.Trim('\0', ' ')));
+        public IEnumerable<Tuple<string, string>> NamedProperties => Taggs.OfType<PropertyTagg>().Select(p => new Tuple<string, string>(p.PropertyName.Trim('\0', ' '), p.Value.Trim('\0', ' ')));
 
         public int FaceCount => Faces.Length;
 
@@ -73,7 +73,7 @@ namespace BIS.P3D.MLOD
             {
                 Normals[i] = new Vector3P(input);
             }
-            for (int i = 0;  i < nFaces; ++i)
+            for (int i = 0; i < nFaces; ++i)
             {
                 Faces[i] = new Face(input);
             }

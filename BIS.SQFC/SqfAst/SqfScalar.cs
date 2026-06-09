@@ -6,7 +6,7 @@ namespace BIS.SQFC.SqfAst
     public sealed class SqfScalar : SqfExpression
     {
         public SqfScalar(float value)
-        { 
+        {
             Value = value;
         }
 

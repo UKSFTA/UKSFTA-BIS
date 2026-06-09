@@ -56,7 +56,7 @@ namespace BIS.SQFC.SqfAst
 
         private static int GetPrecedence(string name)
         {
-            switch(name)
+            switch (name)
             {
                 case "||":
                 case "or":

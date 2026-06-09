@@ -17,7 +17,7 @@ namespace BIS.P3D.Test.MLOD
             // Setup minimal MLOD
             var lods = new P3DM_LOD[]
             {
-                new P3DM_LOD(1.0f, 
+                new P3DM_LOD(1.0f,
                     new Point[] { new Point(new Vector3P(0,0,0), PointFlags.NONE), new Point(new Vector3P(1,0,0), PointFlags.NONE), new Point(new Vector3P(0,1,0), PointFlags.NONE) },
                     new Vector3P[] { new Vector3P(0,0,1), new Vector3P(0,0,1), new Vector3P(0,0,1) },
                     new Face[] { new Face(3, new Vertex[] { new Vertex(0,0,0,0), new Vertex(1,1,1,0), new Vertex(2,2,0,1), new Vertex(0,0,0,0) }, FaceFlags.DEFAULT, "", "") },

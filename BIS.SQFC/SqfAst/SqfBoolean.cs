@@ -5,7 +5,7 @@ namespace BIS.SQFC.SqfAst
     public sealed class SqfBoolean : SqfExpression
     {
         public SqfBoolean(bool value)
-        { 
+        {
             Value = value;
         }
 

@@ -7,6 +7,6 @@
         LocationInfo,
         Code,
         CodeDebug,
-        CommandNameDirectory 
+        CommandNameDirectory
     }
 }

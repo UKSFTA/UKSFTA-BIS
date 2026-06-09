@@ -22,9 +22,9 @@ namespace BIS.SQFC
 
         internal override void Execute(List<SqfStatement> result, Stack<SqfExpression> stack, SqfcFile context)
         {
-            if (stack.Count > 0 )
+            if (stack.Count > 0)
             {
-                foreach(var item in stack)
+                foreach (var item in stack)
                 {
                     result.Add(new SqfEvaluateStatement(item));
                 }

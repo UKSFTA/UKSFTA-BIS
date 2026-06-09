@@ -5,7 +5,7 @@ using System.Text;
 
 namespace BIS.PAA
 {
-    internal enum TexSwizzle: byte
+    internal enum TexSwizzle : byte
     {
         TSAlpha,
         TSRed,
@@ -29,7 +29,7 @@ namespace BIS.PAA
         {
             get
             {
-                switch(ch)
+                switch (ch)
                 {
                     case 0: return SwizA;
                     case 1: return SwizR;

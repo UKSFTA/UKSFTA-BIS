@@ -7,22 +7,22 @@ using System.Threading.Tasks;
 
 namespace BIS.ALB
 {
-    public enum ALB_Datatype: byte
+    public enum ALB_Datatype : byte
     {
-        Character=1,
-        Integer=5,
-        Integer2=6,
-        Integer3=7,
-        Integer4=8,
-        Boolean=9,
-        Float=10,
-        String=11,
-        List=12,
-        Object=13,
-        Unknown=15,
-        Unknown2=19,
-        Double=20,
-        DoubleArray=21
+        Character = 1,
+        Integer = 5,
+        Integer2 = 6,
+        Integer3 = 7,
+        Integer4 = 8,
+        Boolean = 9,
+        Float = 10,
+        String = 11,
+        List = 12,
+        Object = 13,
+        Unknown = 15,
+        Unknown2 = 19,
+        Double = 20,
+        DoubleArray = 21
     }
 
     public class ALB1
@@ -223,7 +223,7 @@ namespace BIS.ALB
 
             var nTags = input.ReadInt32();
 
-            for(int i=0;i<nTags;i++)
+            for (int i = 0; i < nTags; i++)
             {
                 var tagID = input.ReadUInt16();
                 var name = input.ReadAscii();
@@ -248,7 +248,7 @@ namespace BIS.ALB
             input.ReadBytes(6);
 
             int? layerVersion = null;
-            while(input.Position < input.BaseStream.Length)
+            while (input.Position < input.BaseStream.Length)
             {
                 var e = new ALB_Entry(input, layerVersion);
                 if (tags[e.TagID].Equals("mlayerversion", StringComparison.OrdinalIgnoreCase))
@@ -282,10 +282,10 @@ namespace BIS.ALB
         {
             var treeEntry = entries.FirstOrDefault(e => tags[e.TagID].Equals("tree"));
             var sb = new StringBuilder();
-            if(treeEntry != null)
+            if (treeEntry != null)
             {
                 var listValue = treeEntry.Value as ALB_List;
-                if(listValue.treeRoot != null)
+                if (listValue.treeRoot != null)
                 {
                     var objData = new LinkedList<ObjectTreeLeaf>();
                     ExtractObjectData(listValue.treeRoot, objData);

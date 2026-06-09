@@ -5,7 +5,7 @@ namespace BIS.SQFC.SqfAst
     public sealed class SqfString : SqfExpression
     {
         public SqfString(string value)
-        { 
+        {
             Value = value;
         }
 

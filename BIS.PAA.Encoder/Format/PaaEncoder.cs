@@ -31,7 +31,7 @@ namespace BIS.PAA.Encoder
             {
                 for (int x = 0; x < image.GetLength(1); ++x)
                 {
-                    var color = image[y,x];
+                    var color = image[y, x];
                     max.r = Math.Max(color.r, max.r);
                     max.g = Math.Max(color.g, max.g);
                     max.b = Math.Max(color.b, max.b);
@@ -47,7 +47,7 @@ namespace BIS.PAA.Encoder
                     }
                 }
             }
-            var avg = new ColorRgba32((byte)(sumR / totalPixels),(byte)(sumG / totalPixels),(byte)(sumB / totalPixels),(byte)(sumA / totalPixels));
+            var avg = new ColorRgba32((byte)(sumR / totalPixels), (byte)(sumG / totalPixels), (byte)(sumB / totalPixels), (byte)(sumA / totalPixels));
 
             if (type == PAAType.UNDEFINED)
             {
@@ -92,7 +92,7 @@ namespace BIS.PAA.Encoder
 
             writer.Write(type == PAAType.DXT5 ? (ushort)0xff05 : (ushort)0xff01);
 
-            writer.WriteAscii("GGATCGVA", 8); 
+            writer.WriteAscii("GGATCGVA", 8);
             writer.Write((uint)4);
             new PackedColor(avg.r, avg.g, avg.b, avg.a).Write(writer);
 
@@ -109,7 +109,7 @@ namespace BIS.PAA.Encoder
 
             writer.WriteAscii("GGATSFFO", 8);
             writer.Write(16 * 4);
-            for (int i = 0; i < 16; ++i )
+            for (int i = 0; i < 16; ++i)
             {
                 if (i < mipmaps.Count)
                 {
@@ -128,7 +128,7 @@ namespace BIS.PAA.Encoder
             {
                 if (writer.Position != mipmap.Offset)
                 {
-                    throw new Exception($"Wrong offset @{mipmap.Width} : {writer.Position} != { mipmap.Offset}");
+                    throw new Exception($"Wrong offset @{mipmap.Width} : {writer.Position} != {mipmap.Offset}");
                 }
                 writer.Write(mipmap.WidthEncoded);
                 writer.Write(mipmap.Height);

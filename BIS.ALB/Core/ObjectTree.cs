@@ -73,7 +73,7 @@ namespace BIS.ALB
 
             ObjectTypeHashes = new int[ObjectTypeCount];
             ObjectInfos = new ObjectInfo[ObjectTypeCount][];
-            for(int curObjType = 0; curObjType < ObjectTypeCount; curObjType++)
+            for (int curObjType = 0; curObjType < ObjectTypeCount; curObjType++)
             {
                 var nObjects = input.ReadInt32();
                 ObjectTypeHashes[curObjType] = input.ReadInt32();
@@ -90,10 +90,10 @@ namespace BIS.ALB
             var node = $"{Area};{HashValue}:";
             var sb = new StringBuilder(node);
             sb.AppendLine();
-            for(int i=0;i < ObjectTypeCount; i++)
+            for (int i = 0; i < ObjectTypeCount; i++)
             {
                 var objType = ObjectTypeHashes[i];
-                foreach(var objinfo in ObjectInfos[i])
+                foreach (var objinfo in ObjectInfos[i])
                 {
                     sb.AppendLine($"    {objType};{objinfo}");
                 }

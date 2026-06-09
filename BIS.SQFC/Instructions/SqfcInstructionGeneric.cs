@@ -14,7 +14,7 @@ namespace BIS.SQFC
             Value = value;
         }
 
-        public override InstructionType InstructionType { get;}
+        public override InstructionType InstructionType { get; }
 
         public string Value { get; }
 
@@ -39,7 +39,7 @@ namespace BIS.SQFC
 
         public override string ToString()
         {
-            switch(InstructionType)
+            switch (InstructionType)
             {
                 case InstructionType.GetVariable:
                     return $"get {Value};";

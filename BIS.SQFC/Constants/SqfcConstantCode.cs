@@ -27,7 +27,7 @@ namespace BIS.SQFC
         {
             writer.Write(ContentString);
             writer.Write(Instructions.Count);
-            foreach(var instruction in Instructions)
+            foreach (var instruction in Instructions)
             {
                 instruction.WriteTo(writer, context);
             }
@@ -87,7 +87,7 @@ namespace BIS.SQFC
 
         public override bool Equals(SqfcConstant other)
         {
-            if ( other is SqfcConstantCode code)
+            if (other is SqfcConstantCode code)
             {
                 return other == this || (Instructions.Count == code.Instructions.Count && Instructions.SequenceEqual(code.Instructions));
             }

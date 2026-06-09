@@ -70,7 +70,7 @@ namespace BIS.WRP
             output.WriteAscii("8WVR", 4);
             output.Write(LandRangeX);
             output.Write(LandRangeY);
-            output.Write(TerrainRangeX );
+            output.Write(TerrainRangeX);
             output.Write(TerrainRangeY);
             output.Write(CellSize);
             output.WriteFloats(Elevation);
@@ -84,7 +84,7 @@ namespace BIS.WRP
                 }
                 output.WriteAscii32("");
             }
-            foreach(var obj in Objects)
+            foreach (var obj in Objects)
             {
                 obj.Write(output);
             }

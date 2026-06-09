@@ -19,7 +19,7 @@ namespace BIS.SQFC
         internal override void WriteDataTo(BinaryWriterEx writer, SqfcFile context)
         {
             writer.Write(Value.Count);
-            foreach(var c in Value)
+            foreach (var c in Value)
             {
                 c.WriteTo(writer, context);
             }

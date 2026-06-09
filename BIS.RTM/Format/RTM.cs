@@ -50,7 +50,7 @@ namespace BIS.RTM
 
             for (int frame = 0; frame < nFrames; frame++)
             {
-                output.Write(FrameTimes[frame]); 
+                output.Write(FrameTimes[frame]);
                 for (int b = 0; b < nBones; b++)
                 {
                     output.WriteAscii(BoneNames[b], 32);
@@ -64,7 +64,7 @@ namespace BIS.RTM
             Displacement = new Vector3P(input);
             var nFrames = input.ReadInt32();
 
-            BoneNames = input.ReadArray( inp => inp.ReadAscii(32) );
+            BoneNames = input.ReadArray(inp => inp.ReadAscii(32));
 
             var nBones = BoneNames.Length;
 

@@ -30,7 +30,7 @@ namespace BIS.SQFC
 
                 case ConstantType.Code:
                     var contentString = reader.ReadUInt64();
-                    return new SqfcConstantCode(contentString, reader.ReadArrayBase(r => SqfcInstruction.Read(r, context), reader.ReadInt32())); 
+                    return new SqfcConstantCode(contentString, reader.ReadArrayBase(r => SqfcInstruction.Read(r, context), reader.ReadInt32()));
 
                 case ConstantType.NularCommand:
                     return new SqfcConstantNularCommand(reader.ReadSqfcString());

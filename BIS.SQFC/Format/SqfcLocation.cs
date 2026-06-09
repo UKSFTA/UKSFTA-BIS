@@ -56,7 +56,7 @@ namespace BIS.SQFC
 
         internal SqfLocation ToSqf(SqfcFile file)
         {
-            if ( this == None)
+            if (this == None)
             {
                 return SqfLocation.None;
             }

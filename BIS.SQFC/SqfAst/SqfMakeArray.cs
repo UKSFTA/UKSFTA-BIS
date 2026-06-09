@@ -40,7 +40,7 @@ namespace BIS.SQFC.SqfAst
             }
             else
             {
-                foreach(var item in Items)
+                foreach (var item in Items)
                 {
                     item.Compile(context, instructions);
                 }

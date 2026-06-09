@@ -10,7 +10,7 @@ namespace BIS.WRP
         public static EditableWrpObject Dummy = new EditableWrpObject()
         {
             Model = "",
-            ObjectID = int.MaxValue, 
+            ObjectID = int.MaxValue,
             Transform = new Matrix4P(new Matrix4x4(
                         float.NaN, float.NaN, float.NaN, 0f,
                         float.NaN, float.NaN, float.NaN, 0f,

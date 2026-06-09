@@ -22,7 +22,7 @@ namespace BIS.SQFC
                 location = SqfcLocation.Read(reader);
             }
 
-            switch(type)
+            switch (type)
             {
                 case InstructionType.EndStatement:
                     return new SqfcInstructionEndStatement();

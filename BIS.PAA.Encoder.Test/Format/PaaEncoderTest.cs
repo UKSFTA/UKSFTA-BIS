@@ -10,5 +10,6 @@ namespace BIS.PAA.Encoder.Test.Format
         {
             // PaaEncoder is static, cannot be instantiated.
             Assert.True(true);
-        }    }
+        }
+    }
 }

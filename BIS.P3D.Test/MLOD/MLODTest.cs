@@ -9,7 +9,7 @@ using BIS.Core.Math;
 
 namespace BIS.P3D.Test.MLOD
 {
-    public class MLODTests
+    public class MLODTest
     {
         [Fact]
         public void MLOD_Serialization_ShouldBeConsistent()

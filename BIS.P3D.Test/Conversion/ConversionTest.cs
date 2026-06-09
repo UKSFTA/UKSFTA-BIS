@@ -10,7 +10,7 @@ using BIS.Core.Streams;
 
 namespace BIS.P3D.Test.Conversion
 {
-    public class ConversionTests
+    public class ConversionTest
     {
         [Fact]
         public void ODOL2MLOD_Convert_MinimalStructure_ShouldReturnMlod()

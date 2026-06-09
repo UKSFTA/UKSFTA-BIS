@@ -34,7 +34,7 @@ namespace BIS.PBO
 
         [Obsolete]
         public LinkedList<string> Properties { get; } = new LinkedList<string>();
-        public List<KeyValuePair<string,string>> PropertiesPairs { get; } = new List<KeyValuePair<string, string>>();
+        public List<KeyValuePair<string, string>> PropertiesPairs { get; } = new List<KeyValuePair<string, string>>();
         public int DataOffset { get; private set; }
         public string Prefix { get; private set; }
         public string FileName => Path.GetFileName(PBOFilePath);
@@ -130,7 +130,7 @@ namespace BIS.PBO
                 if (entry.CompressedMagic == 0)
                 {
                     bytes = new byte[entry.DataSize];
-                    PBOFileStream.Read(bytes, 0, entry.DataSize);
+                    PBOFileStream.ReadExactly(bytes, 0, entry.DataSize);
                 }
                 else
                 {
@@ -177,9 +177,9 @@ namespace BIS.PBO
 
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
 
-                using(var targetFile = File.Create(path))
+                using (var targetFile = File.Create(path))
                 {
-                    using(var source = entry.OpenRead())
+                    using (var source = entry.OpenRead())
                     {
                         source.CopyTo(targetFile);
                     }
@@ -268,29 +268,30 @@ namespace BIS.PBO
 
         private void SaveToInternal(string targetFile, bool isReplaceSelf)
         {
-            var entries = Files.Select(e => new FileEntry() { 
-                FileName = e.FileName, 
+            var entries = Files.Select(e => new FileEntry()
+            {
+                FileName = e.FileName,
                 TimeStamp = e.TimeStamp,
-                DataSize = e.Size, 
-                UncompressedSize = 0, 
-                CompressedMagic = 0 
+                DataSize = e.Size,
+                UncompressedSize = 0,
+                CompressedMagic = 0
             }).ToList();
 
             var offset = 0;
-            foreach(var entry in entries)
+            foreach (var entry in entries)
             {
                 entry.StartOffset = offset;
                 offset += entry.DataSize;
             }
 
-            using(var target = File.Create(targetFile))
+            using (var target = File.Create(targetFile))
             {
                 using (var output = new BinaryWriterEx(target, true))
                 {
                     WriteProperties(output, PropertiesPairs.SelectMany(p => new[] { p.Key, p.Value }));
                     WriteBasicHeader(output, entries);
                 }
-                foreach(var file in Files)
+                foreach (var file in Files)
                 {
                     using (var source = file.OpenRead())
                     {
@@ -299,7 +300,7 @@ namespace BIS.PBO
                 }
                 target.Position = 0;
                 byte[] hash;
-                using (var sha1 = new SHA1Managed())
+                using (var sha1 = SHA1.Create())
                 {
                     hash = sha1.ComputeHash(target);
                 }

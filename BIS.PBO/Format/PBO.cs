@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -70,6 +70,7 @@ namespace BIS.PBO
         private void ReadHeader(BinaryReaderEx input)
         {
             int curOffset = 0;
+            int unknownCounter = 0;
             FileEntry pboEntry;
 #pragma warning disable CS0612 // Le type ou le membre est obsolète
             do
@@ -106,6 +107,7 @@ namespace BIS.PBO
                 }
                 else if (pboEntry.FileName != "")
                 {
+                    pboEntry.FileName = SanitizeFileName(pboEntry.FileName, ref unknownCounter);
                     FileEntries.AddLast(pboEntry);
                     Files.Add(new PBOFileExisting(pboEntry, this));
                 }
@@ -119,6 +121,39 @@ namespace BIS.PBO
             {
                 Prefix = Path.GetFileNameWithoutExtension(PBOFilePath);
             }
+        }
+
+        private static string SanitizeFileName(string fileName, ref int unknownCounter)
+        {
+            if (string.IsNullOrWhiteSpace(fileName)) return fileName;
+
+            bool isValid = true;
+
+            foreach (char c in fileName)
+            {
+                if (char.IsControl(c) || c == '*' || c == '?' || c == '<' || c == '>' || c == '|' || c == ':' || c == '"')
+                {
+                    isValid = false;
+                    break;
+                }
+            }
+
+            if (isValid)
+            {
+                if (fileName.Contains("..") || fileName.StartsWith("\\") || fileName.StartsWith("/"))
+                {
+                    isValid = false;
+                }
+            }
+
+            if (!isValid)
+            {
+                string newName = $"_unknown\\_unknown_file{unknownCounter}.bin";
+                unknownCounter++;
+                return newName;
+            }
+
+            return fileName;
         }
 
         private byte[] GetFileData(FileEntry entry)

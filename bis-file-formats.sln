@@ -39,6 +39,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BIS.PAA.Encoder.Test", "BIS
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BIS.PAA.Encoder", "BIS.PAA.Encoder\BIS.PAA.Encoder.csproj", "{D47B7ABE-5159-4532-A15B-67BDEC02234D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BIS.PBO.Deobfuscator", "BIS.PBO.Deobfuscator\BIS.PBO.Deobfuscator.csproj", "{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -265,6 +267,18 @@ Global
 		{D47B7ABE-5159-4532-A15B-67BDEC02234D}.Release|x64.Build.0 = Release|Any CPU
 		{D47B7ABE-5159-4532-A15B-67BDEC02234D}.Release|x86.ActiveCfg = Release|Any CPU
 		{D47B7ABE-5159-4532-A15B-67BDEC02234D}.Release|x86.Build.0 = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|x64.Build.0 = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Debug|x86.Build.0 = Debug|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|x64.ActiveCfg = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|x64.Build.0 = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|x86.ActiveCfg = Release|Any CPU
+		{BA7A0D67-B8B9-4293-A934-2B047C1AAE79}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

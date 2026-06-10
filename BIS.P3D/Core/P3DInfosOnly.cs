@@ -11,11 +11,11 @@ namespace BIS.P3D
 
         public IModelInfo ModelInfo =>
             binarized?.ModelInfo
-            ?? editable.ModelInfo;
+            ?? editable?.ModelInfo;
 
         public bool IsEditable => editable != null;
 
-        public int Version => binarized?.Version ?? editable.Version;
+        public int Version => binarized?.Version ?? editable?.Version ?? 0;
 
         public static bool IsODOL(string filePath)
         {

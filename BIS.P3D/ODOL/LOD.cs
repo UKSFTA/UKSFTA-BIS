@@ -65,7 +65,8 @@ namespace BIS.P3D.ODOL
             }
 
             var uvset0 = new UVSet(input, version);
-            UvSets = new UVSet[input.ReadUInt32()];
+            var uvSetCount = Math.Max(1u, input.ReadUInt32());
+            UvSets = new UVSet[uvSetCount];
             UvSets[0] = uvset0;
             for (int i = 1; i < UvSets.Length; ++i)
             {
@@ -140,7 +141,13 @@ namespace BIS.P3D.ODOL
         public float BRadius { get; }
         public string[] Textures { get; }
         public string[] Selections => NamedSelections.Select(ns => ns.Name).ToArray();
-        string[] ILevelOfDetail.Proxies => RawProxies.Select(p => NamedSelections[p.NamedSelectionIndex].Name).ToArray();
+        string[] ILevelOfDetail.Proxies =>
+            NamedSelections == null
+                ? Array.Empty<string>()
+                : RawProxies.Select(p =>
+                    p.NamedSelectionIndex >= 0 && p.NamedSelectionIndex < NamedSelections.Length
+                        ? NamedSelections[p.NamedSelectionIndex].Name
+                        : null).Where(n => n != null).ToArray();
         public EmbeddedMaterial[] Materials { get; }
         public TrackedArray<int> PointToVertex { get; }
         public TrackedArray<int> VertexToPoint { get; }
@@ -260,18 +267,22 @@ namespace BIS.P3D.ODOL
         public Vector3P[] Points => Vertices.Select(v => (Vector3P)v).ToArray();
 
         public IEnumerable<string> GetTextures()
-
         {
-            return Textures
-                    .Concat(Materials.SelectMany(m => m.StageTextures).Select(st => st.Texture))
-                    .Concat(Materials.Where(m => m.StageTI != null).Select(m => m.StageTI.Texture))
+            var texs = Textures ?? Array.Empty<string>();
+            var mats = Materials ?? Array.Empty<EmbeddedMaterial>();
+            return texs
+                    .Concat(mats.SelectMany(m => m.StageTextures ?? Array.Empty<StageTexture>()).Select(st => st.Texture))
+                    .Concat(mats.Where(m => m.StageTI != null).Select(m => m.StageTI.Texture))
                     .Distinct();
         }
 
         public IEnumerable<string> GetMaterials()
         {
-            return Materials.Select(m => m.MaterialName)
-                .Concat(Sections.Where(s => s.MaterialIndex != -1).Select(s => s.Material))
+            var mats = Materials ?? Array.Empty<EmbeddedMaterial>();
+            var secs = Sections ?? Array.Empty<Section>();
+            return mats.Select(m => m.MaterialName)
+                .Concat(secs.Where(s => s.MaterialIndex >= 0 && s.MaterialIndex < mats.Length)
+                    .Select(s => mats[s.MaterialIndex].MaterialName))
                 .Distinct();
         }
 

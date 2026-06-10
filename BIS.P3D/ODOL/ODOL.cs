@@ -107,8 +107,10 @@ namespace BIS.P3D.ODOL
                     Trace.TraceWarning($"LOD {resolutions[m]} end mismatch. Expected={lodEndAdresses[m]} Actual={input.Position}");
                 }
             }
-            input.Position = lodEndAdresses.Max();
-            Extra = input.ReadBytes((int)(input.BaseStream.Length - input.Position));
+            if (lodEndAdresses.Length > 0)
+                input.Position = lodEndAdresses.Max();
+            var remaining = input.BaseStream.Length - input.Position;
+            Extra = remaining > 0 ? input.ReadBytes((int)remaining) : Array.Empty<byte>();
         }
 
         internal void WriteContent(BinaryWriterEx output)

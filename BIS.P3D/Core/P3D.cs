@@ -18,17 +18,17 @@ namespace BIS.P3D
 
         public IModelInfo ModelInfo =>
             binarized?.ModelInfo
-            ?? editable.ModelInfo;
+            ?? editable?.ModelInfo;
 
         public IEnumerable<ILevelOfDetail> LODs =>
             binarized?.Lods.AsEnumerable<ILevelOfDetail>()
-            ?? editable.Lods.AsEnumerable<ILevelOfDetail>();
+            ?? editable?.Lods?.AsEnumerable<ILevelOfDetail>();
 
         public bool IsEditable => editable != null;
 
-        public int Version => binarized?.Version ?? editable.Version;
+        public int Version => binarized?.Version ?? editable?.Version ?? 0;
 
-        public float Mass => binarized?.ModelInfo.Mass ?? 0.0f; // Simplified mapping
+        public float Mass => binarized?.ModelInfo?.Mass ?? 0.0f;
 
         public static bool IsODOL(string filePath)
         {

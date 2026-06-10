@@ -182,13 +182,28 @@ namespace BIS.PBO
 
             foreach (char c in fileName)
             {
-                if (!char.IsControl(c) && c != '*' && c != '?' && c != '<' && c != '>' && c != '|' && c != ':' && c != '"')
+                // Strip control characters, forbidden Windows path characters, and non-ASCII characters (often used for obfuscation)
+                if (!char.IsControl(c) && c <= 127 && c != '*' && c != '?' && c != '<' && c != '>' && c != '|' && c != ':' && c != '"')
                 {
                     clean.Append(c);
                 }
             }
 
-            string recovered = clean.ToString().Replace("..", "").TrimStart('\\', '/');
+            string recovered = clean.ToString().Replace("..", "");
+            
+            // Normalize slashes
+            recovered = recovered.Replace("/", "\\");
+
+            // Collapse multiple spaces around slashes and duplicate slashes
+            string oldRecovered;
+            do
+            {
+                oldRecovered = recovered;
+                recovered = recovered.Replace("\\\\", "\\").Replace(" \\", "\\").Replace("\\ ", "\\");
+            } while (oldRecovered != recovered);
+
+            // Trim leading/trailing slashes, spaces, and stray dots
+            recovered = recovered.Trim(' ', '\\', '.');
 
             if (string.IsNullOrWhiteSpace(recovered))
             {

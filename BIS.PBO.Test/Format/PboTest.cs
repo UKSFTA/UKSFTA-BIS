@@ -74,6 +74,14 @@ namespace BIS.PBO.Test.Format
                     writer.Write(0);
                     writer.Write(20);
 
+                    // Write bad entry 3: completely irrecoverable (forces unknown file and extension guessing)
+                    writer.WriteAsciiz("*?<>");
+                    writer.Write(0);
+                    writer.Write(4);
+                    writer.Write(0);
+                    writer.Write(0);
+                    writer.Write(4);
+
                     // Write end entry
                     writer.WriteAsciiz("");
                     writer.Write(0);
@@ -82,14 +90,25 @@ namespace BIS.PBO.Test.Format
                     writer.Write(0);
                     writer.Write(0);
                     
-                    // Write dummy data
-                    writer.Write(new byte[30]);
+                    // Write dummy data (34 bytes to satisfy DataSize requirements for reading)
+                    var dummyData = new byte[34];
+                    // Make the third file look like a .paa file (0x00, 'r', 'a', 'S')
+                    dummyData[0] = 0x00;
+                    dummyData[1] = (byte)'r';
+                    dummyData[2] = (byte)'a';
+                    dummyData[3] = (byte)'S';
+                    writer.Write(dummyData);
                 }
 
                 var pbo = new PBO(tempFile);
-                Assert.Equal(2, pbo.Files.Count);
-                Assert.Equal("_unknown\\_unknown_file0.bin", pbo.Files[0].FileName);
-                Assert.Equal("_unknown\\_unknown_file1.bin", pbo.Files[1].FileName);
+                Assert.Equal(3, pbo.Files.Count);
+                
+                // Aggressive cleaning recovery
+                Assert.Equal("badfile.txt", pbo.Files[0].FileName);
+                Assert.Equal("secret.txt", pbo.Files[1].FileName);
+                
+                // Fallback unknown naming + extension guessing (from .paa magic bytes at StartOffset 0)
+                Assert.Equal("_unknown\\_unknown_file0.paa", pbo.Files[2].FileName);
             }
             finally
             {

@@ -121,39 +121,81 @@ namespace BIS.PBO
             {
                 Prefix = Path.GetFileNameWithoutExtension(PBOFilePath);
             }
+
+            // Post-process to guess extensions for completely unknown files
+            foreach (var entry in FileEntries)
+            {
+                if (entry.FileName.StartsWith("_unknown\\_unknown_file") && !entry.FileName.Contains("."))
+                {
+                    entry.FileName += GuessExtension(entry);
+                }
+            }
+        }
+
+        private string GuessExtension(FileEntry entry)
+        {
+            if (entry.DataSize < 4 || pboFileStream == null) return ".bin";
+
+            long oldPos = pboFileStream.Position;
+            try
+            {
+                pboFileStream.Position = DataOffset + entry.StartOffset;
+                byte[] magic = new byte[4];
+                pboFileStream.Read(magic, 0, 4);
+
+                // raP\0 = binarized config/rvmat
+                if (magic[0] == 'r' && magic[1] == 'a' && magic[2] == 'P' && magic[3] == '\0')
+                    return ".bin";
+
+                // PAA magic varies, but typically starts with a short (e.g. 0xFF01 or \x00raS)
+                if (magic[0] == 0x00 && magic[1] == 'r' && magic[2] == 'a' && magic[3] == 'S')
+                    return ".paa";
+                if (magic[1] == 0x00 && magic[2] == 0x00 && magic[3] == 0x00) // Generic header hint
+                    return ".paa";
+
+                // SQF / text files usually start with printable characters
+                bool isText = true;
+                for (int i = 0; i < 4; i++)
+                {
+                    if (magic[i] == 0 || magic[i] > 127) isText = false;
+                }
+                
+                if (isText) return ".sqf";
+
+                return ".bin";
+            }
+            catch
+            {
+                return ".bin";
+            }
+            finally
+            {
+                pboFileStream.Position = oldPos;
+            }
         }
 
         private static string SanitizeFileName(string fileName, ref int unknownCounter)
         {
-            if (string.IsNullOrWhiteSpace(fileName)) return fileName;
+            if (string.IsNullOrWhiteSpace(fileName)) return $"_unknown\\_unknown_file{unknownCounter++}";
 
-            bool isValid = true;
+            var clean = new System.Text.StringBuilder(fileName.Length);
 
             foreach (char c in fileName)
             {
-                if (char.IsControl(c) || c == '*' || c == '?' || c == '<' || c == '>' || c == '|' || c == ':' || c == '"')
+                if (!char.IsControl(c) && c != '*' && c != '?' && c != '<' && c != '>' && c != '|' && c != ':' && c != '"')
                 {
-                    isValid = false;
-                    break;
+                    clean.Append(c);
                 }
             }
 
-            if (isValid)
+            string recovered = clean.ToString().Replace("..", "").TrimStart('\\', '/');
+
+            if (string.IsNullOrWhiteSpace(recovered))
             {
-                if (fileName.Contains("..") || fileName.StartsWith("\\") || fileName.StartsWith("/"))
-                {
-                    isValid = false;
-                }
+                return $"_unknown\\_unknown_file{unknownCounter++}";
             }
 
-            if (!isValid)
-            {
-                string newName = $"_unknown\\_unknown_file{unknownCounter}.bin";
-                unknownCounter++;
-                return newName;
-            }
-
-            return fileName;
+            return recovered;
         }
 
         private byte[] GetFileData(FileEntry entry)

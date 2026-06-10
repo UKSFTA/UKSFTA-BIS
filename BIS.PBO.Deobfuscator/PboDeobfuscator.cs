@@ -86,33 +86,81 @@ namespace BIS.PBO.Deobfuscator
         /// <summary>
         /// Rebuild a clean PBO file from a deobfuscation result.
         /// - Excludes entries in FilteredOut (decoys, stubs, padding)
-        /// - Renames entries using best available name (heuristic > recovered > original)
+        /// - Renames entries with heuristic ASCII names when possible
+        /// - Falls back to cleaned original names
         /// - Preserves original header properties and timestamps
         /// </summary>
         public static void Rebuild(PBO pbo, DeobfuscationResult result, string outputPath)
         {
+            // Build dir-word → class list from config.bin
+            var wordToClasses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var classNames = ExtractDeobfuscatorClassNames(pbo);
-            var dirNameCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var cls in classNames)
+            {
+                var clsLower = cls.ToLowerInvariant();
+                var words = clsLower.Split('_').Where(w => w.Length >= 3).Distinct();
+                foreach (var w in words)
+                {
+                    if (!wordToClasses.ContainsKey(w))
+                        wordToClasses[w] = new List<string>();
+                    wordToClasses[w].Add(clsLower);
+                }
+            }
 
             var keep = new List<(int Index, FileEntry Entry)>();
+            var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var dirCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
             for (int i = 0; i < pbo.Files.Count; i++)
             {
                 if (result.FilteredOut.Contains(i))
                     continue;
 
                 var original = pbo.Files[i];
+                var origNorm = original.FileName.Replace('\\', '/');
+                var slashIdx = origNorm.LastIndexOf('/');
+                var dir = slashIdx >= 0 ? origNorm.Substring(0, slashIdx) : "";
+                var origFile = slashIdx >= 0 ? origNorm.Substring(slashIdx + 1) : origNorm;
+
                 string finalName;
 
+                // Priority: clean recovered > heuristic > recovered > original
                 if (result.RecoveredNames.TryGetValue(i, out var recovered))
                 {
-                    var clean = TryGenerateCleanName(recovered, original.FileName, classNames);
-                    finalName = clean ?? recovered;
+                    var recoveredNorm = recovered.Replace('\\', '/');
+                    var recoveredIsClean = recoveredNorm.All(c => c < 128);
+
+                    if (recoveredIsClean)
+                    {
+                        finalName = recoveredNorm;
+                    }
+                    else
+                    {
+                        // Recovered name is Cyrillic — try heuristic
+                        finalName = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames)
+                                    ?? recoveredNorm;
+                    }
                 }
                 else
                 {
-                    finalName = original.FileName;
+                    finalName = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames)
+                                ?? origNorm;
                 }
 
+                // Final fallback: still stripped or Cyrillic → use numbered placeholder
+                var lastSeg = finalName.Split('/', '\\').Last();
+                if (lastSeg.StartsWith("_") || lastSeg.StartsWith(".") || finalName.Any(c => c >= 128))
+                {
+                    dirCounters.TryGetValue(dir, out var counter);
+                    counter++;
+                    dirCounters[dir] = counter;
+                    var ext = Path.GetExtension(origFile);
+                    var oldName = finalName;
+                    finalName = $"{dir}/file{counter:D3}{ext}";
+                    Console.Error.WriteLine($"  [FALLBACK] dir='{dir}' orig='{origFile}' old='{oldName}' -> new='{finalName}'  (stripped={lastSeg.StartsWith("_")}, cyrillic={oldName.Any(c => c >= 128)})");
+                }
+
+                usedNames.Add(finalName);
                 keep.Add((i, new FileEntry
                 {
                     FileName = finalName,
@@ -159,6 +207,58 @@ namespace BIS.PBO.Deobfuscator
             Console.WriteLine($"  -> Rebuilt: {outputPath} ({kept} files kept, {removed} removed)");
         }
 
+        private static string? GenerateHeuristicName(
+            string dir, string origFile,
+            Dictionary<string, List<string>> wordToClasses,
+            HashSet<string> usedNames)
+        {
+            if (wordToClasses.Count == 0)
+                return null;
+
+            var dirWords = dir.Split('/')
+                .SelectMany(s => s.Split('_'))
+                .Where(w => w.Length >= 3 && !w.All(char.IsDigit))
+                .Select(w => w.ToLowerInvariant())
+                .Distinct()
+                .ToArray();
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var dw in dirWords)
+            {
+                if (wordToClasses.TryGetValue(dw, out var directMatches))
+                {
+                    foreach (var baseName in directMatches)
+                    {
+                        if (!seen.Add(baseName)) continue;
+                        var candidate = $"{dir}/{baseName}{origFile}";
+                        if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                            return candidate;
+                    }
+                }
+            }
+
+            foreach (var kvp in wordToClasses)
+            {
+                foreach (var dw in dirWords)
+                {
+                    if (kvp.Key.IndexOf(dw, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        dw.IndexOf(kvp.Key, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        foreach (var baseName in kvp.Value)
+                        {
+                            if (!seen.Add(baseName)) continue;
+                            var candidate = $"{dir}/{baseName}{origFile}";
+                            if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                                return candidate;
+                        }
+                    }
+                }
+            }
+
+            return null;
+        }
+
         private static void WriteProperties(BinaryWriterEx output, List<KeyValuePair<string, string>> props)
         {
             var versionEntry = new FileEntry
@@ -176,68 +276,15 @@ namespace BIS.PBO.Deobfuscator
                 output.WriteAsciiz(key);
                 output.WriteAsciiz(value);
             }
-            output.Write((byte)0); // terminating empty string
+            output.Write((byte)0);
         }
 
         private static void WriteBasicHeader(BinaryWriterEx output, IEnumerable<FileEntry> entries)
         {
             foreach (var entry in entries)
                 entry.Write(output);
-            // Empty entry terminator: zero filename + 20 zero bytes
             output.Write((byte)0);
-            output.Write(0);
-            output.Write(0);
-            output.Write(0);
-            output.Write(0);
-            output.Write(0);
-        }
-
-        /// <summary>
-        /// Try to convert a Cyrillic-obfuscated recovered path to a clean ASCII name
-        /// using config class names. Falls back to returning null if no clean name is possible.
-        /// </summary>
-        private static string? TryGenerateCleanName(string recoveredPath, string originalName, List<string> classNames)
-        {
-            // Extract directory, suffix, extension from the stripped original
-            var norm = recoveredPath.Replace('\\', '/');
-            var dir = "";
-            var fileName = norm;
-            var slashIdx = norm.LastIndexOf('/');
-            if (slashIdx >= 0)
-            {
-                dir = norm.Substring(0, slashIdx);
-                fileName = norm.Substring(slashIdx + 1);
-            }
-
-            // Extract suffix+ext from the original stripped name (e.g., "_co.paa")
-            var origNorm = originalName.Replace('\\', '/');
-            var origFile = origNorm.Contains('/') ? origNorm.Substring(origNorm.LastIndexOf('/') + 1) : origNorm;
-
-            // Try to find a class name that matches the directory words
-            // Directory "data/avs" → class words containing "avs"
-            var dirWords = dir.Split('/')
-                .SelectMany(s => s.Split('_'))
-                .Where(w => w.Length >= 3 && !w.All(char.IsDigit))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            foreach (var cls in classNames)
-            {
-                var clsLower = cls.ToLowerInvariant();
-                var dirMatch = dirWords.Count == 0 ||
-                    dirWords.Any(dw => clsLower.Contains(dw, StringComparison.OrdinalIgnoreCase) ||
-                                       clsLower.Split('_').Any(cw =>
-                                           cw.Length >= 3 && dw.Contains(cw, StringComparison.OrdinalIgnoreCase)));
-
-                if (!dirMatch)
-                    continue;
-
-                var reconstructed = $"{dir}/{clsLower}{origFile}";
-                if (reconstructed.All(c => c <= 127 || c == '/' || c == '.' || c == '_'))
-                    return reconstructed;
-            }
-
-            return null;
+            output.Write(0); output.Write(0); output.Write(0); output.Write(0); output.Write(0);
         }
 
         /// <summary>

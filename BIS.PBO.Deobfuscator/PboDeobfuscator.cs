@@ -143,7 +143,7 @@ namespace BIS.PBO.Deobfuscator
                         dirCounters.TryGetValue(dir, out var counter);
                         counter++;
                         dirCounters[dir] = counter;
-                        var ext = Path.GetExtension(origFile);
+                        var ext = DetectExtension(original);
                         finalName = $"{dir}/file{counter:D3}{ext}";
                     }
                 }
@@ -193,6 +193,61 @@ namespace BIS.PBO.Deobfuscator
             var kept = keep.Count;
             var removed = result.FilteredOut.Count;
             Console.WriteLine($"  -> Rebuilt: {outputPath} ({kept} files kept, {removed} removed)");
+        }
+
+        /// <summary>
+        /// Reads the first bytes of a PBO entry to detect the actual file type
+        /// and return the correct extension. Falls back to the original extension
+        /// when the type is unknown.
+        /// </summary>
+        private static string DetectExtension(IPBOFileEntry entry)
+        {
+            try
+            {
+                using var stream = entry.OpenRead();
+                byte[] header = new byte[4];
+                int read = stream.Read(header, 0, 4);
+                if (read < 4)
+                    return Path.GetExtension(entry.FileName) ?? ".bin";
+
+                // raP\0 = binarized config or RVMAT
+                if (header[0] == 'r' && header[1] == 'a' && header[2] == 'P' && header[3] == 0)
+                    return ".bin";
+
+                // \0raS = PAA
+                if (header[0] == 0 && header[1] == 'r' && header[2] == 'a' && header[3] == 'S')
+                    return ".paa";
+
+                // PAA: first 2 bytes as LE uint16
+                ushort fmt = (ushort)(header[0] | (header[1] << 8));
+                if (fmt == 0xFF01 || fmt == 0xFF02 || fmt == 0xFF03 ||
+                    fmt == 0xFF04 || fmt == 0xFF05 || fmt == 0x4444 ||
+                    fmt == 0x8080 || fmt == 0x1555)
+                    return ".paa";
+
+                // PAA: also matches \0raS (handled above), but some PAA variants
+                // start with the format code directly — the above covers DXT1-5 and common formats.
+
+                // ODOL or MLOD = P3D model
+                if (header[0] == 'O' && header[1] == 'D' && header[2] == 'O' && header[3] == 'L')
+                    return ".p3d";
+                if (header[0] == 'M' && header[1] == 'L' && header[2] == 'O' && header[3] == 'D')
+                    return ".p3d";
+
+                // 0DHT = texHeaders cache
+                if (header[0] == '0' && header[1] == 'D' && header[2] == 'H' && header[3] == 'T')
+                    return ".bin";
+
+                // Text files: start with printable ASCII, BOM, or common script chars
+                if (header[0] >= 0x20 && header[0] <= 0x7E)
+                    return Path.GetExtension(entry.FileName) ?? ".txt";
+
+                return Path.GetExtension(entry.FileName) ?? ".bin";
+            }
+            catch
+            {
+                return Path.GetExtension(entry.FileName) ?? ".bin";
+            }
         }
 
         private static string? GenerateHeuristicName(

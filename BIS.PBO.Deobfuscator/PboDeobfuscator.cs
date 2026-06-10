@@ -124,40 +124,28 @@ namespace BIS.PBO.Deobfuscator
 
                 string finalName;
 
-                // Priority: clean recovered > heuristic > recovered > original
-                if (result.RecoveredNames.TryGetValue(i, out var recovered))
+                // If the original entry was NOT stripped, keep as-is
+                if (!origFile.StartsWith("_") && !origFile.StartsWith("."))
                 {
-                    var recoveredNorm = recovered.Replace('\\', '/');
-                    var recoveredIsClean = recoveredNorm.All(c => c < 128);
-
-                    if (recoveredIsClean)
-                    {
-                        finalName = recoveredNorm;
-                    }
-                    else
-                    {
-                        // Recovered name is Cyrillic — try heuristic
-                        finalName = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames)
-                                    ?? recoveredNorm;
-                    }
+                    finalName = origNorm;
                 }
                 else
                 {
-                    finalName = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames)
-                                ?? origNorm;
-                }
-
-                // Final fallback: still stripped or Cyrillic → use numbered placeholder
-                var lastSeg = finalName.Split('/', '\\').Last();
-                if (lastSeg.StartsWith("_") || lastSeg.StartsWith(".") || finalName.Any(c => c >= 128))
-                {
-                    dirCounters.TryGetValue(dir, out var counter);
-                    counter++;
-                    dirCounters[dir] = counter;
-                    var ext = Path.GetExtension(origFile);
-                    var oldName = finalName;
-                    finalName = $"{dir}/file{counter:D3}{ext}";
-                    Console.Error.WriteLine($"  [FALLBACK] dir='{dir}' orig='{origFile}' old='{oldName}' -> new='{finalName}'  (stripped={lastSeg.StartsWith("_")}, cyrillic={oldName.Any(c => c >= 128)})");
+                    // Try heuristic first (uses recovered context via wordToClasses)
+                    var heur = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames);
+                    if (heur != null)
+                    {
+                        finalName = heur;
+                    }
+                    else
+                    {
+                        // Forced fallback: numbered placeholder — NEVER produce _name or Cyrillic
+                        dirCounters.TryGetValue(dir, out var counter);
+                        counter++;
+                        dirCounters[dir] = counter;
+                        var ext = Path.GetExtension(origFile);
+                        finalName = $"{dir}/file{counter:D3}{ext}";
+                    }
                 }
 
                 usedNames.Add(finalName);

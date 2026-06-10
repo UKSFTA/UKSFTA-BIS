@@ -110,6 +110,7 @@ namespace BIS.PBO.Deobfuscator
             var keep = new List<(int Index, FileEntry Entry)>();
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var dirCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            int zeroBytesSkipped = 0;
 
             for (int i = 0; i < pbo.Files.Count; i++)
             {
@@ -117,6 +118,11 @@ namespace BIS.PBO.Deobfuscator
                     continue;
 
                 var original = pbo.Files[i];
+                if (original.Size == 0)
+                {
+                    zeroBytesSkipped++;
+                    continue;
+                }
                 var origNorm = original.FileName.Replace('\\', '/');
                 var slashIdx = origNorm.LastIndexOf('/');
                 var dir = slashIdx >= 0 ? origNorm.Substring(0, slashIdx) : "";
@@ -195,8 +201,10 @@ namespace BIS.PBO.Deobfuscator
             }
 
             var kept = keep.Count;
-            var removed = result.FilteredOut.Count;
+            var removed = result.FilteredOut.Count + zeroBytesSkipped;
             Console.WriteLine($"  -> Rebuilt: {outputPath} ({kept} files kept, {removed} removed)");
+            if (zeroBytesSkipped > 0)
+                Console.WriteLine($"  -> Skipped {zeroBytesSkipped} zero-byte padding entries.");
         }
 
         /// <summary>

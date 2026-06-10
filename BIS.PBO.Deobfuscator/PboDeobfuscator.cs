@@ -144,7 +144,11 @@ namespace BIS.PBO.Deobfuscator
                         counter++;
                         dirCounters[dir] = counter;
                         var ext = DetectExtension(original);
-                        finalName = $"{dir}/file{counter:D3}{ext}";
+                        var dirPrefix = dir.Split('/').LastOrDefault() ?? "file";
+                        if (dirPrefix == "_unknown")
+                            dirPrefix = "file";
+                        var baseName = $"{dirPrefix}_{counter:D3}";
+                        finalName = $"{dir}/{baseName}{ext}";
                     }
                 }
 

@@ -8,26 +8,23 @@ using BIS.PBO;
 
 namespace BIS.PBO.Deobfuscator.Profiles
 {
-    /// <summary>
-    /// Handles PBOs that exhibit a decoy-entry structural pattern.
-    ///
-    /// These PBOs contain injected fake 0-byte file entries and small stub scripts
-    /// scattered among genuine assets. Header properties often contain unusually
-    /// long random-looking key/value pairs that serve as signatures.
-    /// Original filenames are typically replaced with random garbage.
-    ///
-    /// Detection uses structural heuristics rather than tool-specific strings:
-    ///   - Properties with abnormally long keys or values (> 40 chars)
-    ///   - Presence of multiple zero-byte file entries
-    ///
-    /// Recovery strategy:
-    ///   1. Mark 0-byte entries as decoys.
-    ///   2. Mark very small script/bin files as stubs.
-    ///   3. Scan SQF files for entry-point patterns (execVM, call compile).
-    ///   4. Categorise genuine files by their data (textures, models, configs).
-    /// </summary>
     public class DecoyInjectionProfile : IObfuscationProfile
     {
+        private static readonly string[] RealExtensions = new[]
+        {
+            ".paa", ".p3d", ".rvmat", ".dll", ".so"
+        };
+
+        private static readonly string[] KnownRootFiles = new[]
+        {
+            "config.cpp", "description.ext", "mission.sqm", "OBFUSQF_API.dll", "OBFUSQF_API_x64.dll"
+        };
+
+        private static readonly Regex RandomNamePattern = new Regex(
+            @"^[A-Za-z0-9]{2,12}$",
+            RegexOptions.Compiled
+        );
+
         public string ProfileName => "Decoy Injection";
 
         public bool IsMatch(BIS.PBO.PBO pbo)
@@ -53,6 +50,9 @@ namespace BIS.PBO.Deobfuscator.Profiles
             for (int i = 0; i < pbo.Files.Count; i++)
             {
                 var file = pbo.Files[i];
+                string ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                string nameOnly = Path.GetFileNameWithoutExtension(file.FileName);
+                bool hasDirectory = file.FileName.Contains('\\');
 
                 // Zero-byte files are known decoy entries
                 if (file.Size == 0)
@@ -63,10 +63,8 @@ namespace BIS.PBO.Deobfuscator.Profiles
                     continue;
                 }
 
-                // Very small files (< 20 bytes) are likely obfuscator glue stubs
-                if (file.Size < 20 &&
-                    (file.FileName.EndsWith(".sqf", StringComparison.OrdinalIgnoreCase) ||
-                     file.FileName.EndsWith(".bin", StringComparison.OrdinalIgnoreCase)))
+                // Very small files (< 20 bytes) of any type are likely obfuscator glue stubs
+                if (file.Size < 20)
                 {
                     result.RecoveredNames[i] = $"_stub/{file.FileName}";
                     result.FilteredOut.Add(i);
@@ -74,21 +72,71 @@ namespace BIS.PBO.Deobfuscator.Profiles
                     continue;
                 }
 
-                // Scan SQF files for entry point patterns
-                if (file.FileName.EndsWith(".sqf", StringComparison.OrdinalIgnoreCase) && file.Size < 65536)
+                // Small root-level files with random-looking names are likely decoys
+                if (!hasDirectory && file.Size < 1000 && !KnownRootFiles.Contains(file.FileName, StringComparer.OrdinalIgnoreCase))
+                {
+                    if (ext.Equals(".paa", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // .paa files must always be in a data directory, root .paa is suspicious
+                        result.RecoveredNames[i] = $"_stub/{file.FileName}";
+                        result.FilteredOut.Add(i);
+                        stubs++;
+                        continue;
+                    }
+
+                    // Check for random-looking filenames (short alphanumeric strings)
+                    if (nameOnly.Length <= 14 && RandomNamePattern.IsMatch(nameOnly))
+                    {
+                        // Exception: real P3D model files are often in the root
+                        if (ext.Equals(".p3d", StringComparison.OrdinalIgnoreCase) && file.Size > 100000)
+                            goto scanContent;
+
+                        result.RecoveredNames[i] = $"_stub/{file.FileName}";
+                        result.FilteredOut.Add(i);
+                        stubs++;
+                        continue;
+                    }
+                }
+
+                // Check for _unknown files that are suspiciously small
+                if (file.FileName.StartsWith("_unknown\\", StringComparison.OrdinalIgnoreCase) && file.Size < 200)
+                {
+                    result.RecoveredNames[i] = $"_stub/{file.FileName}";
+                    result.FilteredOut.Add(i);
+                    stubs++;
+                    continue;
+                }
+
+                scanContent:
+                // Scan small files for decoy content patterns
+                if (file.Size < 65536)
                 {
                     try
                     {
                         byte[] data;
                         using (var ms = file.OpenRead())
                         using (var br = new BinaryReader(ms))
-                            data = br.ReadBytes((int)ms.Length);
+                            data = br.ReadBytes((int)Math.Min(ms.Length, 4096));
 
                         string text = Encoding.ASCII.GetString(data);
-                        if (Regex.IsMatch(text, @"execVM|call\s+compile|preprocessFile", RegexOptions.IgnoreCase))
+
+                        // Check for #include with control characters (Maverick SQF decoys)
+                        if (Regex.IsMatch(text, @"#include\s*""[\x00-\x1F]+""", RegexOptions.IgnoreCase))
                         {
-                            result.RecoveredNames[i] = $"_entry/{file.FileName}";
-                            entryPoints++;
+                            result.RecoveredNames[i] = $"_stub/{file.FileName}";
+                            result.FilteredOut.Add(i);
+                            stubs++;
+                            continue;
+                        }
+
+                        // Check for SQF entry point patterns
+                        if (file.FileName.EndsWith(".sqf", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (Regex.IsMatch(text, @"execVM|call\s+compile|preprocessFile", RegexOptions.IgnoreCase))
+                            {
+                                result.RecoveredNames[i] = $"_entry/{file.FileName}";
+                                entryPoints++;
+                            }
                         }
                     }
                     catch { /* Skip unreadable files */ }

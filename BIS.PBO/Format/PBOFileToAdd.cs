@@ -17,6 +17,8 @@ namespace BIS.PBO
 
         public string FileName { get; }
 
+        public string RawFileName => FileName;
+
         public int Size => (int)file.Length;
 
         public int TimeStamp => (int)file.LastWriteTimeUtc.Subtract(PBO.Epoch).TotalSeconds;

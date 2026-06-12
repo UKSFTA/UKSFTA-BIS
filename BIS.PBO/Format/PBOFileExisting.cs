@@ -14,6 +14,7 @@ namespace BIS.PBO
         }
 
         public string FileName => fileEntry.FileName;
+        public string RawFileName => fileEntry.RawFileName;
 
         public int TimeStamp => fileEntry.TimeStamp;
 

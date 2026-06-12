@@ -5,6 +5,7 @@ namespace BIS.PBO
     public interface IPBOFileEntry
     {
         string FileName { get; }
+        string RawFileName { get; }
         int Size { get; }
         int TimeStamp { get; }
         Stream OpenRead();

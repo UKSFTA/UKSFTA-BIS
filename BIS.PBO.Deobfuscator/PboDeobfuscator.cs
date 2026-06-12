@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text.RegularExpressions;
 using BIS.Core.Config;
 using BIS.Core.Streams;
 using BIS.PBO;
@@ -112,7 +111,8 @@ namespace BIS.PBO.Deobfuscator
         /// </summary>
         public void Rebuild(PBO pbo, DeobfuscationResult result, string outputPath)
         {
-            // Build dir-word → class list from config.bin
+            // Build dir-word → class list from config.bin class names
+            // (class names are clean even when file paths in config are obfuscated)
             var wordToClasses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var classNames = ExtractDeobfuscatorClassNames(pbo);
             var modPrefix = DetectModPrefix(classNames, pbo.Prefix);
@@ -138,6 +138,14 @@ namespace BIS.PBO.Deobfuscator
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var dirCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             int zeroBytesSkipped = 0;
+
+            // Build config model path -> class name map for .p3d naming
+            var configModelMap = BuildConfigModelMap(pbo);
+            if (configModelMap.Count > 0)
+            {
+                var classMapStr = string.Join(", ", configModelMap.Take(3).Select(kvp => $"{kvp.Key}->{kvp.Value}"));
+                Console.Error.WriteLine($"[ConfigModelMap] {configModelMap.Count} models: {classMapStr}...");
+            }
 
             for (int i = 0; i < pbo.Files.Count; i++)
             {
@@ -169,19 +177,34 @@ namespace BIS.PBO.Deobfuscator
                 }
                 else
                 {
-                    // Try heuristic first (uses recovered context via wordToClasses)
-                    var heur = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames);
-                    if (heur != null)
+                    var ext = DetectExtension(original);
+
+                    // For .p3d files: try config-based model naming using 
+                    // RawFileName (preserved Cyrillic-obfuscated name) to match 
+                    // against config.bin class model paths.
+                    if (configModelMap.Count > 0 && ext == ".p3d")
                     {
-                        finalName = heur;
+                        var rawNorm = original.RawFileName.Replace('\\', '/');
+                        if (configModelMap.TryGetValue(rawNorm, out var modelClassName))
+                        {
+                            finalName = $"{dir}/{modelClassName.ToLowerInvariant()}.p3d";
+                        }
                     }
-                    else
+
+                    if (finalName == null)
                     {
-                        // Forced fallback: numbered placeholder — NEVER produce _name or Cyrillic
+                        // Try heuristic (uses class-name word index)
+                        var heur = GenerateHeuristicName(dir, origFile, wordToClasses, usedNames);
+                        if (heur != null)
+                        {
+                            finalName = heur;
+                        }
+                        else
+                        {
+                            // Forced fallback: numbered placeholder
                         dirCounters.TryGetValue(dir, out var counter);
                         counter++;
                         dirCounters[dir] = counter;
-                        var ext = DetectExtension(original);
                         var dirPrefix = dir.Split('/').LastOrDefault() ?? "file";
                         if (dirPrefix == "_unknown")
                             dirPrefix = "file";
@@ -508,6 +531,57 @@ namespace BIS.PBO.Deobfuscator
                 var prefixed = prefix.Replace('\\', '/').TrimEnd('/') + "/" + orig;
                 if (!pathMap.ContainsKey(prefixed))
                     pathMap[prefixed] = target;
+            }
+        }
+
+        /// <summary>
+        /// Parses config.bin to build a map from normalized model path -> best class name.
+        /// Config.bin stores model paths with the PBO prefix (e.g. "jsoar\model\....p3d").
+        /// PBO entry raw names store the relative path without the prefix ("model\....p3d").
+        /// This method normalises both sides and picks the best class name for each unique model.
+        /// </summary>
+        private static Dictionary<string, string> BuildConfigModelMap(PBO pbo)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var root = pbo.GetRootConfig()?.Root;
+            if (root == null)
+                return map;
+
+            CollectModelPaths(root, map);
+            return map;
+        }
+
+        private static void CollectModelPaths(ParamClass cls, Dictionary<string, string> result)
+        {
+            foreach (var entry in cls.Entries)
+            {
+                if (entry is ParamClass nested)
+                {
+                    // Look for model = "..." in this class
+                    foreach (var e in nested.Entries)
+                    {
+                        if (e is ParamValue val &&
+                            val.Name == "model" &&
+                            val.Value?.Value is string sv &&
+                            sv.EndsWith(".p3d", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var rawPath = sv.Replace('\\', '/');
+                            // Strip the prefix (first path component, e.g. "jsoar/" or "JSOAR/")
+                            // The PBO entry raw names don't include this prefix.
+                            var slashIdx = rawPath.IndexOf('/');
+                            var relPath = slashIdx >= 0 ? rawPath.Substring(slashIdx + 1) : rawPath;
+
+                            // Pick the shortest class name as the "base" name for this model.
+                            // Multiple classes (variants) can share the same model file.
+                            if (!result.TryGetValue(relPath, out var existing) ||
+                                nested.Name.Length < existing.Length)
+                            {
+                                result[relPath] = nested.Name;
+                            }
+                        }
+                    }
+                    CollectModelPaths(nested, result);
+                }
             }
         }
     }

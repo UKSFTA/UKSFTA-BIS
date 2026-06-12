@@ -8,6 +8,12 @@ namespace BIS.PBO
     public class FileEntry
     {
         public string FileName { get; set; }
+        /// <summary>
+        /// Original obfuscated entry name (with Cyrillic/wildcard garbage) as stored
+        /// in the PBO header, BEFORE sanitization. Preserved for matching against
+        /// config.bin model/texture paths which use the same obfuscation.
+        /// </summary>
+        public string RawFileName { get; set; }
         public int CompressedMagic { get; set; }
         public int UncompressedSize { get; set; }
         public int StartOffset { get; set; }
@@ -21,6 +27,7 @@ namespace BIS.PBO
         public FileEntry()
         {
             FileName = "";
+            RawFileName = "";
             CompressedMagic = 0;
             UncompressedSize = 0;
             StartOffset = 0;
@@ -35,6 +42,7 @@ namespace BIS.PBO
         public void Read(BinaryReaderEx input)
         {
             FileName = input.ReadUTF8z();
+            RawFileName = FileName;
             CompressedMagic = input.ReadInt32();
             UncompressedSize = input.ReadInt32();
             StartOffset = input.ReadInt32();

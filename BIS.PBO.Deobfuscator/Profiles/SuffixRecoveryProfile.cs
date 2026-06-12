@@ -8,6 +8,7 @@ using BIS.Core.Config;
 using ConfigValueType = BIS.Core.Config.ValueType;
 using BIS.PBO;
 using BIS.PBO.Deobfuscator.Format;
+using BIS.PBO.Deobfuscator.Profiles.Specialized;
 using P3DModel = BIS.P3D.P3D;
 
 namespace BIS.PBO.Deobfuscator.Profiles
@@ -69,6 +70,10 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
                 // Match: Cyrillic characters in filename
                 if (name.Any(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я'))
+                    return true;
+
+                // Match: suffix-only names like "_co.paa", "_as.paa"
+                if (name.StartsWith("_"))
                     return true;
 
                 return false;
@@ -300,7 +305,8 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
                         foreach (var cls in candidates)
                         {
-                            var reconstructed = $"{dir}/{cls.ToLowerInvariant()}{suffix}{ext}";
+                            var strippedCls = ProfileUtils.StripColorSuffixes(cls);
+                            var reconstructed = $"{dir}/{strippedCls.ToLowerInvariant()}{suffix}{ext}";
                             if (!usedPaths.Contains(reconstructed))
                             {
                                 Console.WriteLine($"  -> Class match: {file.FileName}  =>  {reconstructed}");
@@ -360,8 +366,9 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
                 if (matchedPath != null)
                 {
-                    Console.WriteLine($"  -> Path match: {file.FileName}  =>  {matchedPath}");
-                    result.RecoveredNames[i] = matchedPath;
+                    var normalizedPath = NormalizePath(matchedPath);
+                    Console.WriteLine($"  -> Path match: {file.FileName}  =>  {normalizedPath}");
+                    result.RecoveredNames[i] = normalizedPath;
                     usedPaths.Add(matchedPath);
                     recovered++;
                 }
@@ -574,7 +581,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                 {
                     var prefixClean = prefix.TrimEnd('/');
                     if (normalized.StartsWith(prefixClean, StringComparison.OrdinalIgnoreCase))
-                        normalized = normalized.Substring(prefixClean.Length);
+                        normalized = normalized.Substring(prefixClean.Length).TrimStart('/');
                 }
 
                 if (string.IsNullOrEmpty(normalized))

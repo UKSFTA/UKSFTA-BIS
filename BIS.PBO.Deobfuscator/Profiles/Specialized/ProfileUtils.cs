@@ -159,6 +159,50 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             }
         }
 
+        /// <summary>
+        /// Strips known color/camo suffixes from the end of a class name.
+        /// E.g. "ADAMS_AVS_BELT_MC_TAN" → "ADAMS_AVS_BELT",
+        ///      "JSOAR_AVS_MC_BLK" → "JSOAR_AVS",
+        ///      "UKSF_MOD3_TAN" → "UKSF_MOD3".
+        /// Tokens are stripped from the right while they match known color/camo tokens.
+        /// Returns the original name if no suffixes are removed.
+        /// </summary>
+        public static string StripColorSuffixes(string className)
+        {
+            var tokens = className.Split('_');
+            int stripCount = 0;
+            for (int i = tokens.Length - 1; i >= 0; i--)
+            {
+                if (_colorTokens.Contains(tokens[i]))
+                    stripCount++;
+                else
+                    break;
+            }
+            return stripCount > 0
+                ? string.Join("_", tokens, 0, tokens.Length - stripCount)
+                : className;
+        }
+
+        private static readonly HashSet<string> _colorTokens = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "mc", "mcb", "mct",           // multi-cam variants
+            "aor1", "aor2",               // AOR patterns
+            "blk", "bl", "black",         // black
+            "tan",                         // tan
+            "sim",                         // suit-intermediate
+            "nb",                          // no-belt (variant modifier)
+            "olv", "oli", "olive",         // olive
+            "grn", "green",                // green
+            "khk", "khaki",                // khaki
+            "gry", "grey", "gray",         // grey
+            "coy", "coyote",               // coyote brown
+            "rgr",                         // ranger green
+            "arid", "tropic", "alpine", "winter", "desert", "woodland",
+            "wd", "dcu", "ocp", "dpcu", "erdl", "flecktarn", "flktn",
+            "multicam", "kryptek", "cadpat", "marpat", "atacs", "atacsfg", "atacsxg",
+            "nwu", "ttsk",
+        };
+
         public static Dictionary<string, List<string>> BuildSuffixToClassMap(List<string> classNames, string prefix)
         {
             var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -170,7 +214,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                 {
                     var prefixClean = prefix.TrimEnd('/');
                     if (normalized.StartsWith(prefixClean, StringComparison.OrdinalIgnoreCase))
-                        normalized = normalized.Substring(prefixClean.Length);
+                        normalized = normalized.Substring(prefixClean.Length).TrimStart('/');
                 }
 
                 var words = normalized.Split('_')
@@ -182,8 +226,8 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                 {
                     if (!map.ContainsKey(word))
                         map[word] = new List<string>();
-                    if (!map[word].Contains(cls))
-                        map[word].Add(cls);
+                    if (!map[word].Contains(normalized))
+                        map[word].Add(normalized);
                 }
             }
 

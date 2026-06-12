@@ -174,9 +174,9 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         {
             var root = new ParamClass("root", new ParamEntry[]
             {
-                new ParamValue("texture", new RawValue("data\\tex\\wall_co.paa")),
-                new ParamValue("model", new RawValue("data\\models\\car.p3d")),
-                new ParamValue("notAPath", new RawValue("hello_world")),
+                new ParamValue("texture", "data\\tex\\wall_co.paa"),
+                new ParamValue("model", "data\\models\\car.p3d"),
+                new ParamValue("notAPath", "hello_world"),
             });
 
             var paths = ProfileUtils.ExtractPathsFromRap(root);
@@ -195,7 +195,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
                 {
                     new ParamClass("MyCar", new ParamEntry[]
                     {
-                        new ParamValue("model", new RawValue("data\\models\\car.p3d"))
+                        new ParamValue("model", "data\\models\\car.p3d")
                     })
                 })
             });
@@ -237,8 +237,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         {
             var root = new ParamClass("root", new ParamEntry[]
             {
-                new ParamValue("tex1", new RawValue("data\\tex\\wall.paa")),
-                new ParamValue("tex2", new RawValue("data\\tex\\WALL.paa")),
+                new ParamValue("tex1", "data\\tex\\wall.paa"),
+                new ParamValue("tex2", "data\\tex\\WALL.paa"),
             });
 
             var paths = ProfileUtils.ExtractPathsFromRap(root);
@@ -255,14 +255,14 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
             {
                 new ParamClass("MyClass", System.Array.Empty<ParamEntry>()),
                 new ParamClass("CfgPatches", System.Array.Empty<ParamEntry>()), // excluded
-                new ParamClass("Short", System.Array.Empty<ParamEntry>()), // too short (<3)
+                new ParamClass("AB", System.Array.Empty<ParamEntry>()), // too short (<3)
             });
 
             var names = ProfileUtils.ExtractClassNames(root);
 
             Assert.Contains("MyClass", names);
             Assert.DoesNotContain("CfgPatches", names);
-            Assert.DoesNotContain("Short", names);
+            Assert.DoesNotContain("AB", names);
         }
 
         [Fact]
@@ -319,6 +319,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
             Assert.Contains("avs", map.Keys);
             Assert.Contains("assault", map.Keys);
             Assert.Contains("vest", map.Keys);
+            // After stripping prefix "jsoar/", the normalized class name is "avs_assault_vest"
+            Assert.Contains("avs_assault_vest", map["avs"]);
         }
 
         [Fact]
@@ -326,6 +328,38 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         {
             var map = ProfileUtils.BuildSuffixToClassMap(new List<string>(), "");
             Assert.Empty(map);
+        }
+
+        // ─── StripColorSuffixes ───
+
+        [Fact]
+        public void StripColorSuffixes_RemovesTrailingColorTokens()
+        {
+            Assert.Equal("ADAMS_AVS_BELT", ProfileUtils.StripColorSuffixes("ADAMS_AVS_BELT_MC_TAN"));
+        }
+
+        [Fact]
+        public void StripColorSuffixes_RemovesMultipleTrailingTokens()
+        {
+            Assert.Equal("JSOAR_AVS", ProfileUtils.StripColorSuffixes("JSOAR_AVS_MC_BLK"));
+        }
+
+        [Fact]
+        public void StripColorSuffixes_NoTokens_ReturnsOriginal()
+        {
+            Assert.Equal("JSOAR_AVS", ProfileUtils.StripColorSuffixes("JSOAR_AVS"));
+        }
+
+        [Fact]
+        public void StripColorSuffixes_MidTokenNotColor_StopsEarly()
+        {
+            Assert.Equal("UKSF_KS1_CTR", ProfileUtils.StripColorSuffixes("UKSF_KS1_CTR"));
+        }
+
+        [Fact]
+        public void StripColorSuffixes_OnlyOneToken()
+        {
+            Assert.Equal("vest", ProfileUtils.StripColorSuffixes("vest"));
         }
 
         [Fact]

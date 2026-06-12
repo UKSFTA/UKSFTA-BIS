@@ -7,6 +7,7 @@ using BIS.Core.Config;
 using BIS.Core.Streams;
 using BIS.PBO;
 using BIS.PBO.Deobfuscator.Profiles;
+using BIS.PBO.Deobfuscator.Profiles.Specialized;
 
 namespace BIS.PBO.Deobfuscator
 {
@@ -182,7 +183,10 @@ namespace BIS.PBO.Deobfuscator
                         var rawNorm = original.RawFileName.Replace('\\', '/');
                         if (configModelMap.TryGetValue(rawNorm, out var modelClassName))
                         {
-                            finalName = $"{dir}/{modelClassName.ToLowerInvariant()}.p3d";
+                            var stripped = ProfileUtils.StripColorSuffixes(modelClassName);
+                            finalName = $"{dir}/{stripped.ToLowerInvariant()}.p3d";
+                            if (usedNames.Contains(finalName))
+                                finalName = $"{dir}/{modelClassName.ToLowerInvariant()}.p3d";
                         }
                     }
 
@@ -233,7 +237,7 @@ namespace BIS.PBO.Deobfuscator
                 }
 
                 usedNames.Add(finalName);
-                var pboName = finalName.Replace('/', '\\');
+                var pboName = finalName.Replace('\\', '/');
                 keep.Add((i, new FileEntry
                 {
                     FileName = pboName,
@@ -413,8 +417,8 @@ namespace BIS.PBO.Deobfuscator
                     foreach (var baseName in directMatches)
                     {
                         if (!seen.Add(baseName)) continue;
-                        var candidate = $"{dir}/{baseName}{origFile}";
-                        if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                        var candidate = BuildHeuristicCandidate(dir, baseName, origFile, usedNames);
+                        if (candidate != null)
                             return candidate;
                     }
                 }
@@ -430,14 +434,28 @@ namespace BIS.PBO.Deobfuscator
                         foreach (var baseName in kvp.Value)
                         {
                             if (!seen.Add(baseName)) continue;
-                            var candidate = $"{dir}/{baseName}{origFile}";
-                            if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                            var candidate = BuildHeuristicCandidate(dir, baseName, origFile, usedNames);
+                            if (candidate != null)
                                 return candidate;
                         }
                     }
                 }
             }
 
+            return null;
+        }
+
+        private static string? BuildHeuristicCandidate(string dir, string baseName, string origFile, HashSet<string> usedNames)
+        {
+            // Try stripped version first
+            var stripped = ProfileUtils.StripColorSuffixes(baseName);
+            var candidate = $"{dir}/{stripped}{origFile}";
+            if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                return candidate;
+            // Fall back to original (may contain color suffixes)
+            candidate = $"{dir}/{baseName}{origFile}";
+            if (candidate.All(c => c < 128) && !usedNames.Contains(candidate))
+                return candidate;
             return null;
         }
 
@@ -471,9 +489,9 @@ namespace BIS.PBO.Deobfuscator
 
         /// Detects a common mod prefix from class names (e.g., "jsoar_", "uksf_").
         /// Class-name frequency analysis (>70%), with fallback from PBO prefix property.
-        private static string? DetectModPrefix(List<string> classNames, string? pboPrefix)
+        internal static string? DetectModPrefix(List<string> classNames, string? pboPrefix)
         {
-            if (classNames.Count == 0) return null;
+            if (classNames == null || classNames.Count == 0) return null;
 
             var firstWords = classNames
                 .Select(n => n.Split('_')[0])

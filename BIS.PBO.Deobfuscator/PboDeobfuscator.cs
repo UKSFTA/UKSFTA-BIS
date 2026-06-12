@@ -19,14 +19,16 @@ namespace BIS.PBO.Deobfuscator
     public class PboDeobfuscator
     {
         private readonly List<IObfuscationProfile> _profiles;
+        private readonly List<IReferenceUpdater> _referenceUpdaters;
 
         public PboDeobfuscator()
         {
             _profiles = new List<IObfuscationProfile>
             {
-                new DecoyInjectionProfile(),
-                new SuffixRecoveryProfile()
+                new ModularSuffixRecoveryProfile(),
+                new HeuristicFallbackProfile()
             };
+            _referenceUpdaters = new List<IReferenceUpdater>();
         }
 
         /// <summary>
@@ -35,6 +37,11 @@ namespace BIS.PBO.Deobfuscator
         public void RegisterProfile(IObfuscationProfile profile)
         {
             _profiles.Add(profile);
+        }
+
+        public void RegisterReferenceUpdater(IReferenceUpdater updater)
+        {
+            _referenceUpdaters.Add(updater);
         }
 
         /// <summary>
@@ -90,7 +97,14 @@ namespace BIS.PBO.Deobfuscator
         /// - Falls back to cleaned original names
         /// - Preserves original header properties and timestamps
         /// </summary>
-        public static void Rebuild(PBO pbo, DeobfuscationResult result, string outputPath)
+        /// <summary>
+        /// Rebuild a clean PBO file from a deobfuscation result.
+        /// - Excludes entries in FilteredOut (decoys, stubs, padding)
+        /// - Renames entries with heuristic ASCII names when possible
+        /// - Falls back to cleaned original names
+        /// - Preserves original header properties and timestamps
+        /// </summary>
+        public void Rebuild(PBO pbo, DeobfuscationResult result, string outputPath)
         {
             // Build dir-word → class list from config.bin
             var wordToClasses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
@@ -168,6 +182,26 @@ namespace BIS.PBO.Deobfuscator
                     CompressedMagic = 0
                 }));
             }
+
+            // --- Reference Updating ---
+            foreach (var updater in _referenceUpdaters)
+            {
+                foreach (var (_, entry) in keep)
+                {
+                    var fileEntry = pbo.Files.FirstOrDefault(f => f.FileName == entry.FileName);
+                    if (fileEntry != null)
+                    {
+                        var nameMap = new Dictionary<string, string>();
+                        foreach (var kvp in result.RecoveredNames)
+                        {
+                            var orig = pbo.Files[kvp.Key].FileName;
+                            nameMap[orig] = kvp.Value;
+                        }
+                        updater.UpdateReferences(pbo, fileEntry, nameMap);
+                    }
+                }
+            }
+            // --------------------------
 
             // Compute offsets
             var offset = 0;

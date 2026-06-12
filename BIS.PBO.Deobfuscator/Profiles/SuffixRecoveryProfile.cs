@@ -12,6 +12,17 @@ using P3DModel = BIS.P3D.P3D;
 
 namespace BIS.PBO.Deobfuscator.Profiles
 {
+public class SuffixRecoveryProfile : IObfuscationProfile
+{
+        private static readonly string[] RealExtensions = new[]
+        {
+            ".paa", ".p3d", ".rvmat", ".dll", ".so"
+        };
+
+        private static readonly Regex RandomNamePattern = new Regex(
+            @"^[A-Za-z0-9]{2,12}$",
+            RegexOptions.Compiled
+        );
     /// <summary>
     /// Handles PBOs whose filenames have been stripped to suffix-only patterns.
     ///
@@ -28,8 +39,6 @@ namespace BIS.PBO.Deobfuscator.Profiles
     /// reference the original full file paths. Cross-reference by folder + suffix
     /// to rebuild names where possible.
     /// </summary>
-    public class SuffixRecoveryProfile : IObfuscationProfile
-    {
         public string ProfileName => "Suffix-based Recovery";
 
         // PBO paths use \ as separator; normalize to / for cross-platform Path methods
@@ -50,6 +59,12 @@ namespace BIS.PBO.Deobfuscator.Profiles
 
         public bool IsMatch(BIS.PBO.PBO pbo)
         {
+            // Check for decoy markers (merged from DecoyInjectionProfile)
+            int longProps = pbo.PropertiesPairs.Count(p =>
+                p.Key.Length > 40 || p.Value.Length > 40);
+            int zeroByteFiles = pbo.Files.Count(f => f.Size == 0);
+            if (longProps >= 2 && zeroByteFiles >= 1) return true;
+
             bool hasStrippedNames = pbo.Files.Any(f =>
             {
                 var name = GetFileName(f.FileName);
@@ -61,6 +76,10 @@ namespace BIS.PBO.Deobfuscator.Profiles
                 // Match: suffix-only names like "_as.paa", "_mc.paa"
                 // Exclude generic "_unknown_*" patterns produced by sanitization
                 if (name.StartsWith("_") && !name.StartsWith("_unknown_"))
+                    return true;
+
+                // Match: Cyrillic characters in filename
+                if (name.Any(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я'))
                     return true;
 
                 return false;
@@ -86,7 +105,48 @@ namespace BIS.PBO.Deobfuscator.Profiles
             Console.WriteLine($"  -> Found {knownPaths.Count} candidate path strings in config.bin.");
             var prefix = NormalizePath(pbo.Prefix ?? "");
 
-            // Step 3: scan P3D/ODOL files for embedded texture/material paths
+            // Step 1: Detect and filter out decoy files and stub scripts
+            Console.WriteLine("  -> Scanning files for decoy injection markers...");
+            int decoys = 0;
+            int stubs = 0;
+            int entryPoints = 0;
+
+            for (int i = 0; i < pbo.Files.Count; i++)
+            {
+                var file = pbo.Files[i];
+                string ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+                string nameOnly = Path.GetFileNameWithoutExtension(file.FileName);
+                bool hasDirectory = file.FileName.Contains('\\');
+
+                // Zero-byte files are known decoy entries
+                if (file.Size == 0)
+                {
+                    result.FilteredOut.Add(i);
+                    decoys++;
+                    continue;
+                }
+
+                // Stub scripts are small files with random names
+                if (file.Size < 20 && RandomNamePattern.IsMatch(nameOnly))
+                {
+                    result.FilteredOut.Add(i);
+                    stubs++;
+                    continue;
+                }
+
+                // Entry point scripts are larger files with known extensions
+                if (RealExtensions.Contains(ext) && file.Size > 100)
+                {
+                    entryPoints++;
+                }
+            }
+
+            result.Stats["Decoys"] = decoys;
+            result.Stats["Stubs"] = stubs;
+            result.Stats["EntryPoints"] = entryPoints;
+            result.Stats["Genuine"] = pbo.Files.Count - decoys - stubs;
+
+            // Step 2: scan P3D/ODOL files for embedded texture/material paths
             Console.WriteLine("  -> Scanning P3D files for embedded paths...");
             int p3dScanned = 0;
             int p3dPaths = 0;
@@ -119,6 +179,8 @@ namespace BIS.PBO.Deobfuscator.Profiles
                             var norm = NormalizePath(mat);
                             if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
                             {
+                                knownPaths.Add(norm);
+                                p3dPaths++;
                                 knownPaths.Add(norm);
                                 p3dPaths++;
                             }

@@ -17,7 +17,7 @@ namespace BIS.PBO.Deobfuscator.Profiles
 
         private static readonly string[] KnownRootFiles = new[]
         {
-            "config.cpp", "description.ext", "mission.sqm", "OBFUSQF_API.dll", "OBFUSQF_API_x64.dll"
+            "config.cpp", "description.ext", "mission.sqm"
         };
 
         private static readonly Regex RandomNamePattern = new Regex(
@@ -120,7 +120,7 @@ namespace BIS.PBO.Deobfuscator.Profiles
 
                         string text = Encoding.ASCII.GetString(data);
 
-                        // Check for #include with control characters (Maverick SQF decoys)
+                        // Check for #include with control characters
                         if (Regex.IsMatch(text, @"#include\s*""[\x00-\x1F]+""", RegexOptions.IgnoreCase))
                         {
                             result.RecoveredNames[i] = $"_stub/{file.FileName}";

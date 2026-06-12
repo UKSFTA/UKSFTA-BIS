@@ -87,6 +87,22 @@ namespace BIS.P3D
             }
         }
 
+        public void Write(BinaryWriterEx output)
+        {
+            if (binarized != null)
+            {
+                binarized.Write(output);
+            }
+            else if (editable != null)
+            {
+                editable.Write(output);
+            }
+            else
+            {
+                throw new InvalidOperationException("P3D structure is not initialized.");
+            }
+        }
+
         public ODOL.ODOL ODOL => binarized;
 
         public MLOD.MLOD MLOD => editable;

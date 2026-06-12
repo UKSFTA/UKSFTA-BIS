@@ -415,6 +415,65 @@ namespace BIS.PBO
             }
         }
 
+        /// <summary>
+        /// Adds a new in-memory file entry to the PBO.
+        /// Validates inputs before adding.
+        /// </summary>
+        public void AddFile(string fileName, byte[] data)
+        {
+            Files.Add(new PBOFileInMemory(fileName, data));
+        }
+
+        /// <summary>
+        /// Removes the first file entry with the given name (case-insensitive).
+        /// Returns true if a file was removed.
+        /// </summary>
+        public bool RemoveFile(string fileName)
+        {
+            var normalized = fileName.Replace('/', '\\');
+            for (int i = 0; i < Files.Count; i++)
+            {
+                if (string.Equals(Files[i].FileName, normalized, StringComparison.OrdinalIgnoreCase))
+                {
+                    Files.RemoveAt(i);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Removes the file entry at the given index.
+        /// </summary>
+        public void RemoveFile(int index)
+        {
+            Files.RemoveAt(index);
+        }
+
+        /// <summary>
+        /// Finds the first file entry with the given name (case-insensitive).
+        /// Returns null if not found.
+        /// </summary>
+        public IPBOFileEntry? FindFile(string fileName)
+        {
+            var normalized = fileName.Replace('/', '\\');
+            for (int i = 0; i < Files.Count; i++)
+            {
+                if (string.Equals(Files[i].FileName, normalized, StringComparison.OrdinalIgnoreCase))
+                    return Files[i];
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Finds the first file entry with the given name (case-insensitive).
+        /// Throws KeyNotFoundException if not found.
+        /// </summary>
+        public IPBOFileEntry GetFile(string fileName)
+        {
+            return FindFile(fileName) ?? throw new KeyNotFoundException($"File '{fileName}' not found in PBO.");
+        }
+
         [Obsolete]
         public static IEnumerable<KeyValuePair<FileEntry, PBO>> GetAllNonEmptyFileEntries(string path)
         {

@@ -227,11 +227,14 @@ namespace BIS.PBO.Deobfuscator
 
             // --- Reference Updating ---
             // Build normalized path map: original entry path -> output entry path
+            // Use RawFileName (preserved obfuscated Cyrillic) as keys so that
+            // config.bin references (which contain the same obfuscated paths)
+            // can be matched correctly during reference updating.
             var pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             // First, add recovered (class-based) names so they take priority
             foreach (var kvp in result.RecoveredNames)
             {
-                var orig = pbo.Files[kvp.Key].FileName.Replace('\\', '/');
+                var orig = pbo.Files[kvp.Key].RawFileName.Replace('\\', '/');
                 var recovered = kvp.Value.Replace('\\', '/');
                 pathMap[orig] = recovered;
                 AddPrefixedPath(pbo.Prefix, orig, recovered, pathMap);
@@ -243,7 +246,7 @@ namespace BIS.PBO.Deobfuscator
             {
                 if (recoveredIndices.Contains(idx))
                     continue;
-                var orig = pbo.Files[idx].FileName.Replace('\\', '/');
+                var orig = pbo.Files[idx].RawFileName.Replace('\\', '/');
                 var final = entry.FileName.Replace('\\', '/');
                 if (!pathMap.ContainsKey(orig))
                     pathMap[orig] = final;

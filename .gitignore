@@ -289,3 +289,6 @@ __pycache__/
 
 # Untracked test data
 _testdata_untracked/
+
+# Agent-specific metadata
+.omo/

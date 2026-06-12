@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using BIS.PBO;
 
@@ -14,6 +15,22 @@ namespace BIS.PBO.Deobfuscator.Profiles
 
         public bool IsMatch(PBO pbo)
         {
+            int longProps = pbo.PropertiesPairs.Count(p =>
+                p.Key.Length > 40 || p.Value.Length > 40);
+            int zeroByteFiles = pbo.Files.Count(f => f.Size == 0);
+            if (longProps >= 2 && zeroByteFiles >= 1)
+                return false;
+
+            bool hasSuffiXPattern = pbo.Files.Any(f =>
+            {
+                var name = Path.GetFileName(f.FileName);
+                return name.StartsWith(".") ||
+                       (name.StartsWith("_") && !name.StartsWith("_unknown_")) ||
+                       name.Any(c => c >= 'а' && c <= 'я' || c >= 'А' && c <= 'Я');
+            });
+            if (hasSuffiXPattern)
+                return false;
+
             // Heuristic 1: High ratio of small files to large files
             int smallFiles = pbo.Files.Count(f => f.Size < 512);
             int totalFiles = pbo.Files.Count;

@@ -59,23 +59,12 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
         public bool IsMatch(BIS.PBO.PBO pbo)
         {
-            // Check for decoy markers (merged from DecoyInjectionProfile)
-            int longProps = pbo.PropertiesPairs.Count(p =>
-                p.Key.Length > 40 || p.Value.Length > 40);
-            int zeroByteFiles = pbo.Files.Count(f => f.Size == 0);
-            if (longProps >= 2 && zeroByteFiles >= 1) return true;
-
             bool hasStrippedNames = pbo.Files.Any(f =>
             {
                 var name = GetFileName(f.FileName);
 
                 // Match: extension-only names like ".paa", ".rvmat"
                 if (name.StartsWith("."))
-                    return true;
-
-                // Match: suffix-only names like "_as.paa", "_mc.paa"
-                // Exclude generic "_unknown_*" patterns produced by sanitization
-                if (name.StartsWith("_") && !name.StartsWith("_unknown_"))
                     return true;
 
                 // Match: Cyrillic characters in filename

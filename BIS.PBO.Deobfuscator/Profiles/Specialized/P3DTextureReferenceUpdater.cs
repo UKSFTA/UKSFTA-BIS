@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using BIS.PBO;
 using BIS.P3D.MLOD;
 using BIS.P3D.ODOL;
@@ -36,8 +37,8 @@ namespace BIS.PBO.Deobfuscator
                 {
                     for (int i = 0; i < odolLod.Textures.Length; i++)
                     {
-                        var normalized = odolLod.Textures[i].Replace('\\', '/');
-                        if (TryResolvePath(normalized, pathMap, out string newPath))
+                        var fixedPath = FixEncoding(odolLod.Textures[i]).Replace('\\', '/');
+                        if (TryResolvePath(fixedPath, pathMap, out string newPath))
                         {
                             odolLod.Textures[i] = newPath;
                             modified = true;
@@ -46,8 +47,8 @@ namespace BIS.PBO.Deobfuscator
 
                     for (int i = 0; i < odolLod.Materials.Length; i++)
                     {
-                        var normalized = odolLod.Materials[i].MaterialName.Replace('\\', '/');
-                        if (TryResolvePath(normalized, pathMap, out string newPath))
+                        var fixedPath = FixEncoding(odolLod.Materials[i].MaterialName).Replace('\\', '/');
+                        if (TryResolvePath(fixedPath, pathMap, out string newPath))
                         {
                             odolLod.Materials[i].MaterialName = newPath;
                             modified = true;
@@ -60,13 +61,13 @@ namespace BIS.PBO.Deobfuscator
                     for (int i = 0; i < mlodLod.Faces.Length; i++)
                     {
                         var face = mlodLod.Faces[i];
-                        var texNorm = face.Texture.Replace('\\', '/');
+                        var texNorm = FixEncoding(face.Texture).Replace('\\', '/');
                         if (TryResolvePath(texNorm, pathMap, out string newTex))
                         {
                             face.Texture = newTex;
                             modified = true;
                         }
-                        var matNorm = face.Material.Replace('\\', '/');
+                        var matNorm = FixEncoding(face.Material).Replace('\\', '/');
                         if (TryResolvePath(matNorm, pathMap, out string newMat))
                         {
                             face.Material = newMat;
@@ -85,6 +86,27 @@ namespace BIS.PBO.Deobfuscator
                 p3d.Write(writer);
             }
             return ms.ToArray();
+        }
+
+        /// <summary>
+        /// P3D internal text strings (textures, materials) are read via ReadAsciiz(), which casts each
+        /// byte to char directly — treating UTF-8 multi-byte sequences as two Latin-1 chars (mojibake).
+        /// This reverses that by casting chars back to bytes and re-decoding as proper UTF-8,
+        /// so Cyrillic obfuscation names match the pathMap keys (which come from ReadUTF8z()).
+        /// Pure-ASCII paths pass through unchanged.
+        /// </summary>
+        private static string FixEncoding(string s)
+        {
+            var bytes = new byte[s.Length];
+            bool needsFix = false;
+            for (int i = 0; i < s.Length; i++)
+            {
+                var c = s[i];
+                if (c > 127)
+                    needsFix = true;
+                bytes[i] = (byte)c;
+            }
+            return needsFix ? Encoding.UTF8.GetString(bytes) : s;
         }
 
         private static bool TryResolvePath(string contentPath, Dictionary<string, string> pathMap, out string resolved)

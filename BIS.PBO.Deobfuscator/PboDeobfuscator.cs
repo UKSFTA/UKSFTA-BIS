@@ -141,11 +141,8 @@ namespace BIS.PBO.Deobfuscator
 
             // Build config model path -> class name map for .p3d naming
             var configModelMap = BuildConfigModelMap(pbo);
-            if (configModelMap.Count > 0)
-            {
-                var classMapStr = string.Join(", ", configModelMap.Take(3).Select(kvp => $"{kvp.Key}->{kvp.Value}"));
-                Console.Error.WriteLine($"[ConfigModelMap] {configModelMap.Count} models: {classMapStr}...");
-            }
+            // Build config image path -> variant name map for icon naming (acex, etc.)
+            var configImageMap = BuildConfigImageMap(pbo);
 
             for (int i = 0; i < pbo.Files.Count; i++)
             {
@@ -163,7 +160,7 @@ namespace BIS.PBO.Deobfuscator
                 var dir = slashIdx >= 0 ? origNorm.Substring(0, slashIdx) : "";
                 var origFile = slashIdx >= 0 ? origNorm.Substring(slashIdx + 1) : origNorm;
 
-                string finalName;
+                string finalName = null;
 
                 // Use recovered name if available (from profile deobfuscation)
                 if (result.RecoveredNames.TryGetValue(i, out var recoveredName))
@@ -179,15 +176,35 @@ namespace BIS.PBO.Deobfuscator
                 {
                     var ext = DetectExtension(original);
 
-                    // For .p3d files: try config-based model naming using 
-                    // RawFileName (preserved Cyrillic-obfuscated name) to match 
-                    // against config.bin class model paths.
                     if (configModelMap.Count > 0 && ext == ".p3d")
                     {
                         var rawNorm = original.RawFileName.Replace('\\', '/');
                         if (configModelMap.TryGetValue(rawNorm, out var modelClassName))
                         {
                             finalName = $"{dir}/{modelClassName.ToLowerInvariant()}.p3d";
+                        }
+                    }
+
+                    if (finalName == null && configImageMap.Count > 0 && ext == ".paa")
+                    {
+                        var rawNorm = original.RawFileName.Replace('\\', '/');
+                        if (configImageMap.TryGetValue(rawNorm, out var variantName))
+                        {
+                            var candidate = $"{dir}/{variantName.ToLowerInvariant()}.paa";
+                            if (usedNames.Contains(candidate))
+                            {
+                                // Collision: add numeric suffix
+                                for (int n = 2; n < 100; n++)
+                                {
+                                    var alt = $"{dir}/{variantName.ToLowerInvariant()}_{n}.paa";
+                                    if (!usedNames.Contains(alt))
+                                    {
+                                        candidate = alt;
+                                        break;
+                                    }
+                                }
+                            }
+                            finalName = candidate;
                         }
                     }
 
@@ -210,6 +227,7 @@ namespace BIS.PBO.Deobfuscator
                             dirPrefix = "file";
                         var baseName = $"{dirPrefix}_{counter:D3}";
                         finalName = $"{dir}/{baseName}{ext}";
+                    }
                     }
                 }
 
@@ -550,17 +568,17 @@ namespace BIS.PBO.Deobfuscator
             if (root == null)
                 return map;
 
-            CollectModelPaths(root, map);
+            var prefix = (pbo.Prefix ?? "").Replace('\\', '/').TrimEnd('/');
+            CollectModelPaths(root, map, prefix);
             return map;
         }
 
-        private static void CollectModelPaths(ParamClass cls, Dictionary<string, string> result)
+        private static void CollectModelPaths(ParamClass cls, Dictionary<string, string> result, string pboPrefix)
         {
             foreach (var entry in cls.Entries)
             {
                 if (entry is ParamClass nested)
                 {
-                    // Look for model = "..." in this class
                     foreach (var e in nested.Entries)
                     {
                         if (e is ParamValue val &&
@@ -569,10 +587,15 @@ namespace BIS.PBO.Deobfuscator
                             sv.EndsWith(".p3d", StringComparison.OrdinalIgnoreCase))
                         {
                             var rawPath = sv.Replace('\\', '/');
-                            // Strip the prefix (first path component, e.g. "jsoar/" or "JSOAR/")
-                            // The PBO entry raw names don't include this prefix.
-                            var slashIdx = rawPath.IndexOf('/');
-                            var relPath = slashIdx >= 0 ? rawPath.Substring(slashIdx + 1) : rawPath;
+                            // Config paths may include the PBO prefix (e.g. "jsoar/model/....p3d")
+                            // or be relative (e.g. "muzzle/muzzlecoef.p3d"). Only strip the prefix
+                            // if the path actually starts with it.
+                            var relPath = rawPath;
+                            if (!string.IsNullOrEmpty(pboPrefix) &&
+                                relPath.StartsWith(pboPrefix + "/", StringComparison.OrdinalIgnoreCase))
+                            {
+                                relPath = relPath.Substring(pboPrefix.Length + 1);
+                            }
 
                             // Pick the shortest class name as the "base" name for this model.
                             // Multiple classes (variants) can share the same model file.
@@ -583,7 +606,52 @@ namespace BIS.PBO.Deobfuscator
                             }
                         }
                     }
-                    CollectModelPaths(nested, result);
+                    CollectModelPaths(nested, result, pboPrefix);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Builds a map from raw Cyrillic-obfuscated image paths to the
+        /// parent class (variant) name. Enables semantic naming of icon
+        /// files (e.g. acex_001.paa → acex/mc.paa).
+        /// </summary>
+        private static Dictionary<string, string> BuildConfigImageMap(PBO pbo)
+        {
+            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var root = pbo.GetRootConfig()?.Root;
+            if (root == null)
+                return map;
+
+            CollectImagePaths(root, map);
+            return map;
+        }
+
+        private static void CollectImagePaths(ParamClass cls, Dictionary<string, string> result)
+        {
+            foreach (var entry in cls.Entries)
+            {
+                if (entry is ParamClass nested)
+                {
+                    // Check if this class has an "image" property with a local .paa path
+                    foreach (var e in nested.Entries)
+                    {
+                        if (e is ParamValue val &&
+                            string.Equals(val.Name, "image", StringComparison.OrdinalIgnoreCase) &&
+                            val.Value?.Value is string sv &&
+                            sv.EndsWith(".paa", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var rawPath = sv.Replace('\\', '/');
+                            // Strip prefix (first path component) to match PBO entry raw name
+                            var slashIdx = rawPath.IndexOf('/');
+                            var relPath = slashIdx >= 0 ? rawPath.Substring(slashIdx + 1) : rawPath;
+
+                            // Use the IMMEDIATE parent class name as the variant name
+                            if (!result.ContainsKey(relPath))
+                                result[relPath] = nested.Name.ToLowerInvariant();
+                        }
+                    }
+                    CollectImagePaths(nested, result);
                 }
             }
         }

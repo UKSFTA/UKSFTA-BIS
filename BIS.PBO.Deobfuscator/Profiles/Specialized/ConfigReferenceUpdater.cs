@@ -104,7 +104,7 @@ namespace BIS.PBO.Deobfuscator
             return modified;
         }
 
-        private static bool TryResolvePath(string contentPath, Dictionary<string, string> pathMap, out string resolved)
+        private static bool TryResolvePath(string contentPath, Dictionary<string, string> pathMap, out string? resolved)
         {
             if (pathMap.TryGetValue(contentPath, out resolved))
                 return true;

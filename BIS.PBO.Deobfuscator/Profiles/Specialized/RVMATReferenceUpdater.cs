@@ -102,7 +102,7 @@ namespace BIS.PBO.Deobfuscator
             return modified;
         }
 
-        private static bool TryResolvePath(string contentPath, Dictionary<string, string> pathMap, out string resolved)
+        private static bool TryResolvePath(string contentPath, Dictionary<string, string> pathMap, out string? resolved)
         {
             if (pathMap.TryGetValue(contentPath, out resolved))
                 return true;
@@ -198,7 +198,7 @@ namespace BIS.PBO.Deobfuscator
                 sb.AppendLine($"{ind}{pv.Name} = {pv.Value.Value};");
         }
 
-        private static string EscapeString(string s)
+        private static string EscapeString(string? s)
         {
             if (s == null) return "";
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
@@ -213,11 +213,11 @@ namespace BIS.PBO.Deobfuscator
                 if (rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression)
                     result[i] = $"\"{EscapeString(rv.Value as string)}\"";
                 else if (rv.Type == ConfigValueType.Float)
-                    result[i] = rv.Value.ToString();
+                    result[i] = rv.Value?.ToString() ?? "0";
                 else if (rv.Type == ConfigValueType.Int)
-                    result[i] = rv.Value.ToString();
+                    result[i] = rv.Value?.ToString() ?? "0";
                 else if (rv.Type == ConfigValueType.Int64)
-                    result[i] = rv.Value.ToString();
+                    result[i] = rv.Value?.ToString() ?? "0";
                 else
                     result[i] = rv.Value?.ToString() ?? "null";
             }

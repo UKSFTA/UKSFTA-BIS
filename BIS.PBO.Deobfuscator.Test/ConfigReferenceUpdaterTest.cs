@@ -292,17 +292,17 @@ namespace BIS.PBO.Deobfuscator.Test
                         break;
                     case ParamValue pv:
                         if (pv.Value.Type == ConfigValueType.Generic || pv.Value.Type == ConfigValueType.Expression)
-                            results.Add(pv.Value.Value as string);
+                            results.Add(pv.Value.Value as string ?? "");
                         break;
                     case ParamArray pa:
                         foreach (var rv in pa.Array.Entries)
                             if (rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression)
-                                results.Add(rv.Value as string);
+                                results.Add(rv.Value as string ?? "");
                         break;
                     case ParamArraySpec pas:
                         foreach (var rv in pas.Array.Entries)
                             if (rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression)
-                                results.Add(rv.Value as string);
+                                results.Add(rv.Value as string ?? "");
                         break;
                 }
             }

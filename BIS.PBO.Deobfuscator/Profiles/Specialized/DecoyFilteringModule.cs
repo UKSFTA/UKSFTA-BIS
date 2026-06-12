@@ -19,7 +19,6 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             Console.WriteLine("  -> Scanning files for decoy injection markers...");
             int decoys = 0;
             int stubs = 0;
-            int entryPoints = 0;
 
             for (int i = 0; i < pbo.Files.Count; i++)
             {

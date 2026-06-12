@@ -161,7 +161,7 @@ namespace BIS.PBO.Deobfuscator
                 var dir = slashIdx >= 0 ? origNorm.Substring(0, slashIdx) : "";
                 var origFile = slashIdx >= 0 ? origNorm.Substring(slashIdx + 1) : origNorm;
 
-                string finalName = null;
+                string? finalName = null;
 
                 // Use recovered name if available (from profile deobfuscation)
                 if (result.RecoveredNames.TryGetValue(i, out var recoveredName))

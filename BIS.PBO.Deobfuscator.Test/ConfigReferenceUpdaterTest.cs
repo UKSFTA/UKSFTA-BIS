@@ -257,6 +257,7 @@ namespace BIS.PBO.Deobfuscator.Test
         private class DummyFileEntry : IPBOFileEntry
         {
             public string FileName { get; }
+            public string RawFileName => FileName;
             public int Size { get; }
             public int TimeStamp => 0;
             public bool IsCompressed => false;

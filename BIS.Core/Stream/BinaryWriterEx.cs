@@ -212,6 +212,18 @@ namespace BIS.Core.Streams
         {
             WriteArrayBase(elements, (r, e) => r.Write(e));
         }
+        public void WriteCompactInteger(int value)
+        {
+            do
+            {
+                int b = value & 0x7f;
+                value >>= 7;
+                if (value != 0)
+                    b |= 0x80;
+                Write((byte)b);
+            } while (value != 0);
+        }
+
         public void Write(Vector3 value)
         {
             Write(value.X);

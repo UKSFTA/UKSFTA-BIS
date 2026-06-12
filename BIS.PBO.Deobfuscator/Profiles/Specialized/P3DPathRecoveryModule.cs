@@ -33,7 +33,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                         foreach (var tex in lod.GetTextures())
                         {
                             var norm = ProfileUtils.NormalizePath(tex);
-                            if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                            if (!string.IsNullOrEmpty(norm) && ProfileUtils.IsValidPathString(norm) && !knownPaths.Contains(norm))
                             {
                                 knownPaths.Add(norm);
                                 p3dPaths++;
@@ -42,7 +42,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                         foreach (var mat in lod.GetMaterials())
                         {
                             var norm = ProfileUtils.NormalizePath(mat);
-                            if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                            if (!string.IsNullOrEmpty(norm) && ProfileUtils.IsValidPathString(norm) && !knownPaths.Contains(norm))
                             {
                                 knownPaths.Add(norm);
                                 p3dPaths++;

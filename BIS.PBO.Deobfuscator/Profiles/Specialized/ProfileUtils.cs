@@ -72,6 +72,9 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
+        public static bool IsValidPathString(string s) =>
+            s.All(c => c >= 32 && c <= 126) && !s.Contains('?') && !s.Contains('*');
+
         private static void CollectStringValues(ParamClass cls, List<string> results, Regex pathPattern)
         {
             foreach (var entry in cls.Entries)
@@ -84,7 +87,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
 
                     case ParamValue pv when pv.Value.Type == ConfigValueType.Generic || pv.Value.Type == ConfigValueType.Expression:
                         var strVal = pv.Value.Value as string;
-                        if (!string.IsNullOrEmpty(strVal) && strVal.Contains('\\') && pathPattern.IsMatch(strVal))
+                        if (!string.IsNullOrEmpty(strVal) && strVal.Contains('\\') && pathPattern.IsMatch(strVal) && IsValidPathString(strVal))
                             results.Add(strVal.Replace('/', '\\'));
                         break;
 
@@ -93,7 +96,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                         {
                             if ((rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression) && rv.Value is string s)
                             {
-                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s))
+                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s) && IsValidPathString(s))
                                     results.Add(s.Replace('/', '\\'));
                             }
                         }
@@ -104,7 +107,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                         {
                             if ((rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression) && rv.Value is string s)
                             {
-                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s))
+                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s) && IsValidPathString(s))
                                     results.Add(s.Replace('/', '\\'));
                             }
                         }

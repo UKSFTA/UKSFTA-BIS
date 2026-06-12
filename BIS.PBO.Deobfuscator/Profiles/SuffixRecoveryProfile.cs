@@ -168,7 +168,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                         foreach (var tex in lod.GetTextures())
                         {
                             var norm = NormalizePath(tex);
-                            if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                            if (!string.IsNullOrEmpty(norm) && IsValidPathString(norm) && !knownPaths.Contains(norm))
                             {
                                 knownPaths.Add(norm);
                                 p3dPaths++;
@@ -177,10 +177,8 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                         foreach (var mat in lod.GetMaterials())
                         {
                             var norm = NormalizePath(mat);
-                            if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                            if (!string.IsNullOrEmpty(norm) && IsValidPathString(norm) && !knownPaths.Contains(norm))
                             {
-                                knownPaths.Add(norm);
-                                p3dPaths++;
                                 knownPaths.Add(norm);
                                 p3dPaths++;
                             }
@@ -214,7 +212,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                     foreach (var path in rvmatExtracted)
                     {
                         var norm = NormalizePath(path);
-                        if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                        if (!string.IsNullOrEmpty(norm) && IsValidPathString(norm) && !knownPaths.Contains(norm))
                         {
                             knownPaths.Add(norm);
                             rvmatPaths++;
@@ -243,7 +241,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                     foreach (var tex in texHeaders.Textures)
                     {
                         var norm = NormalizePath(tex.PAAFile);
-                        if (!string.IsNullOrEmpty(norm) && !knownPaths.Contains(norm))
+                        if (!string.IsNullOrEmpty(norm) && IsValidPathString(norm) && !knownPaths.Contains(norm))
                         {
                             knownPaths.Add(norm);
                             texHeaderPaths++;
@@ -272,64 +270,20 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                 }
             }
 
-            // Step 4: build lookup keyed by (folder, suffix+extension)
-            // e.g. key = "data/abav|_as.paa" -> value = "data/abav/avs_vest_as.paa"
-            // ASCII-only paths are preferred over Cyrillic-obfuscated paths
-            var pathLookup = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            foreach (var path in knownPaths)
-            {
-                var dir = GetDirectoryName(path);
-                var file = GetFileName(path);
-
-                var suffixMatch = Regex.Match(file, @"(_[^_]+\.[a-zA-Z0-9]+)$", RegexOptions.IgnoreCase);
-                if (suffixMatch.Success)
-                {
-                    var key = $"{dir}|{suffixMatch.Value}".ToLowerInvariant();
-                    AddToLookup(pathLookup, key, path);
-                }
-
-                var extKey = $"{dir}|{Path.GetExtension(file)}".ToLowerInvariant();
-                AddToLookup(pathLookup, extKey, path);
-            }
-
-            // Step 3: match stripped file entries against path lookup from config.bin
-            int recovered = 0;
             int total = pbo.Files.Count;
+            int recovered = 0;
             var usedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            for (int i = 0; i < total; i++)
-            {
-                var file = pbo.Files[i];
-                var dir = GetDirectoryName(file.FileName);
-                var name = GetFileName(file.FileName);
-
-                if (!name.StartsWith("_") && !name.StartsWith("."))
-                    continue;
-
-                var suffixKey = $"{dir}|{name}".ToLowerInvariant();
-                string? matchedPath = FindUnusedMatch(pathLookup, suffixKey, usedPaths);
-
-                if (matchedPath == null)
-                {
-                    var extKey = $"{dir}|{Path.GetExtension(name)}".ToLowerInvariant();
-                    matchedPath = FindUnusedMatch(pathLookup, extKey, usedPaths);
-                }
-
-                if (matchedPath != null)
-                {
-                    Console.WriteLine($"  -> Recovered: {file.FileName}  =>  {matchedPath}");
-                    result.RecoveredNames[i] = matchedPath;
-                    usedPaths.Add(matchedPath);
-                    recovered++;
-                }
-            }
-
-            // Step 5: heuristic class-name-to-filename matching for remaining entries
+            // Step 4a: heuristic class-name-to-filename matching (priority)
+            // Uses clean class names from config.bin rather than obfuscated path strings
             var classNames = ExtractClassNames(config.Root);
-            var suffixToClass = BuildSuffixToClassMap(classNames, prefix);
+            var modPrefix = DetectModPrefix(classNames, prefix);
+            if (modPrefix != null)
+                Console.WriteLine($"  -> Detected mod prefix: \"{modPrefix}\" — stripping from class names");
+            var suffixToClass = BuildSuffixToClassMap(classNames, prefix, modPrefix);
             if (suffixToClass.Count > 0)
             {
-                Console.WriteLine($"  -> Trying heuristic matching with {classNames.Count} class names...");
+                Console.WriteLine($"  -> Matching {classNames.Count} class names to {total} files...");
                 for (int i = 0; i < total; i++)
                 {
                     if (result.RecoveredNames.ContainsKey(i))
@@ -360,7 +314,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                             var reconstructed = $"{dir}/{cls.ToLowerInvariant()}{suffix}{ext}";
                             if (!usedPaths.Contains(reconstructed))
                             {
-                                Console.WriteLine($"  -> Heuristic: {file.FileName}  =>  {reconstructed}");
+                                Console.WriteLine($"  -> Class match: {file.FileName}  =>  {reconstructed}");
                                 result.RecoveredNames[i] = reconstructed;
                                 usedPaths.Add(reconstructed);
                                 recovered++;
@@ -371,8 +325,56 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                         if (matched)
                             break;
                     }
+                }
+            }
 
+            // Step 4b: build path lookup keyed by (folder, suffix+extension)
+            // Fallback for files not recovered by class-name matching
+            var pathLookup = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in knownPaths)
+            {
+                var dir = GetDirectoryName(path);
+                var file = GetFileName(path);
 
+                var suffixMatch = Regex.Match(file, @"(_[^_]+\.[a-zA-Z0-9]+)$", RegexOptions.IgnoreCase);
+                if (suffixMatch.Success)
+                {
+                    var key = $"{dir}|{suffixMatch.Value}".ToLowerInvariant();
+                    AddToLookup(pathLookup, key, path);
+                }
+
+                var extKey = $"{dir}|{Path.GetExtension(file)}".ToLowerInvariant();
+                AddToLookup(pathLookup, extKey, path);
+            }
+
+            // Step 4c: fallback path-based matching for remaining entries
+            for (int i = 0; i < total; i++)
+            {
+                if (result.RecoveredNames.ContainsKey(i))
+                    continue;
+
+                var file = pbo.Files[i];
+                var dir = GetDirectoryName(file.FileName);
+                var name = GetFileName(file.FileName);
+
+                if (!name.StartsWith("_") && !name.StartsWith("."))
+                    continue;
+
+                var suffixKey = $"{dir}|{name}".ToLowerInvariant();
+                string? matchedPath = FindUnusedMatch(pathLookup, suffixKey, usedPaths);
+
+                if (matchedPath == null)
+                {
+                    var extKey = $"{dir}|{Path.GetExtension(name)}".ToLowerInvariant();
+                    matchedPath = FindUnusedMatch(pathLookup, extKey, usedPaths);
+                }
+
+                if (matchedPath != null)
+                {
+                    Console.WriteLine($"  -> Path match: {file.FileName}  =>  {matchedPath}");
+                    result.RecoveredNames[i] = matchedPath;
+                    usedPaths.Add(matchedPath);
+                    recovered++;
                 }
             }
 
@@ -434,6 +436,9 @@ public class SuffixRecoveryProfile : IObfuscationProfile
             return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
+        private static bool IsValidPathString(string s) =>
+            s.All(c => c >= 32 && c <= 126) && !s.Contains('?') && !s.Contains('*');
+
         private static void CollectStringValues(ParamClass cls, List<string> results, Regex pathPattern)
         {
             foreach (var entry in cls.Entries)
@@ -446,7 +451,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
                     case ParamValue pv when pv.Value.Type == ConfigValueType.Generic || pv.Value.Type == ConfigValueType.Expression:
                         var strVal = pv.Value.Value as string;
-                        if (!string.IsNullOrEmpty(strVal) && strVal.Contains('\\') && pathPattern.IsMatch(strVal))
+                        if (!string.IsNullOrEmpty(strVal) && strVal.Contains('\\') && pathPattern.IsMatch(strVal) && IsValidPathString(strVal))
                             results.Add(strVal.Replace('/', '\\'));
                         break;
 
@@ -455,7 +460,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                         {
                             if ((rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression) && rv.Value is string s)
                             {
-                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s))
+                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s) && IsValidPathString(s))
                                     results.Add(s.Replace('/', '\\'));
                             }
                         }
@@ -466,7 +471,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                         {
                             if ((rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression) && rv.Value is string s)
                             {
-                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s))
+                                if (!string.IsNullOrEmpty(s) && s.Contains('\\') && pathPattern.IsMatch(s) && IsValidPathString(s))
                                     results.Add(s.Replace('/', '\\'));
                             }
                         }
@@ -522,23 +527,68 @@ public class SuffixRecoveryProfile : IObfuscationProfile
             }
         }
 
+        /// Detects a common mod prefix from class names (e.g., "jsoar_", "uksf_").
+        /// Class-name frequency analysis (>70%), with fallback from PBO prefix property.
+        private static string? DetectModPrefix(List<string> classNames, string pboPrefix)
+        {
+            if (classNames.Count == 0)
+                return null;
+
+            var firstWords = classNames
+                .Select(n => n.Split('_')[0])
+                .Where(w => w.Length >= 2)
+                .GroupBy(w => w, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { Word = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            if (firstWords.Count > 0)
+            {
+                var mostCommon = firstWords[0];
+                if ((double)mostCommon.Count / classNames.Count >= 0.7)
+                    return mostCommon.Word + "_";
+            }
+
+            // Fallback: derive tag from PBO prefix property
+            if (!string.IsNullOrEmpty(pboPrefix))
+            {
+                var parts = pboPrefix.Split(new[] { '\\', '/' });
+                var lastPart = parts[^1];
+                var tag = lastPart.Split('_')[0];
+                if (tag.Length >= 2 && classNames.Any(n =>
+                    n.StartsWith(tag + "_", StringComparison.OrdinalIgnoreCase)))
+                    return tag.ToLowerInvariant() + "_";
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Builds a mapping from directory words (e.g., "avs", "abav") to class names
-        /// that contain those words. Strips the PBO prefix from class names before matching.
+        /// that contain those words. Strips the PBO prefix and mod prefix from class names
+        /// before matching, and stores the stripped names for cleaner output filenames.
         /// </summary>
-        private static Dictionary<string, List<string>> BuildSuffixToClassMap(List<string> classNames, string prefix)
+        private static Dictionary<string, List<string>> BuildSuffixToClassMap(List<string> classNames, string prefix, string? modPrefix = null)
         {
             var map = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var cls in classNames)
             {
                 var normalized = cls;
+
+                if (!string.IsNullOrEmpty(modPrefix) &&
+                    normalized.StartsWith(modPrefix, StringComparison.OrdinalIgnoreCase))
+                    normalized = normalized.Substring(modPrefix.Length);
+
                 if (!string.IsNullOrEmpty(prefix))
                 {
                     var prefixClean = prefix.TrimEnd('/');
                     if (normalized.StartsWith(prefixClean, StringComparison.OrdinalIgnoreCase))
                         normalized = normalized.Substring(prefixClean.Length);
                 }
+
+                if (string.IsNullOrEmpty(normalized))
+                    continue;
 
                 var words = normalized.Split('_')
                     .Where(w => w.Length >= 3 && !w.All(char.IsDigit))
@@ -547,10 +597,14 @@ public class SuffixRecoveryProfile : IObfuscationProfile
 
                 foreach (var word in words)
                 {
-                    if (!map.ContainsKey(word))
-                        map[word] = new List<string>();
-                    if (!map[word].Contains(cls))
-                        map[word].Add(cls);
+                    if (!map.TryGetValue(word, out var list))
+                    {
+                        map[word] = new List<string> { normalized };
+                    }
+                    else if (!list.Contains(normalized))
+                    {
+                        list.Add(normalized);
+                    }
                 }
             }
 

@@ -26,9 +26,15 @@ namespace BIS.PBO.Deobfuscator
             _profiles = new List<IObfuscationProfile>
             {
                 new ModularSuffixRecoveryProfile(),
+                new SuffixRecoveryProfile(),
                 new HeuristicFallbackProfile()
             };
-            _referenceUpdaters = new List<IReferenceUpdater>();
+            _referenceUpdaters = new List<IReferenceUpdater>
+            {
+                new P3DTextureReferenceUpdater(),
+                new RVMATReferenceUpdater(),
+                new ConfigReferenceUpdater()
+            };
         }
 
         /// <summary>
@@ -109,15 +115,22 @@ namespace BIS.PBO.Deobfuscator
             // Build dir-word → class list from config.bin
             var wordToClasses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var classNames = ExtractDeobfuscatorClassNames(pbo);
+            var modPrefix = DetectModPrefix(classNames, pbo.Prefix);
             foreach (var cls in classNames)
             {
-                var clsLower = cls.ToLowerInvariant();
+                var stripped = cls;
+                if (!string.IsNullOrEmpty(modPrefix) &&
+                    stripped.StartsWith(modPrefix, StringComparison.OrdinalIgnoreCase))
+                    stripped = stripped.Substring(modPrefix.Length);
+
+                var clsLower = stripped.ToLowerInvariant();
                 var words = clsLower.Split('_').Where(w => w.Length >= 3).Distinct();
                 foreach (var w in words)
                 {
                     if (!wordToClasses.ContainsKey(w))
                         wordToClasses[w] = new List<string>();
-                    wordToClasses[w].Add(clsLower);
+                    if (!wordToClasses[w].Contains(clsLower))
+                        wordToClasses[w].Add(clsLower);
                 }
             }
 
@@ -144,8 +157,13 @@ namespace BIS.PBO.Deobfuscator
 
                 string finalName;
 
+                // Use recovered name if available (from profile deobfuscation)
+                if (result.RecoveredNames.TryGetValue(i, out var recoveredName))
+                {
+                    finalName = recoveredName;
+                }
                 // If the original entry was NOT stripped, keep as-is
-                if (!origFile.StartsWith("_") && !origFile.StartsWith("."))
+                else if (!origFile.StartsWith("_") && !origFile.StartsWith("."))
                 {
                     finalName = origNorm;
                 }
@@ -173,9 +191,10 @@ namespace BIS.PBO.Deobfuscator
                 }
 
                 usedNames.Add(finalName);
+                var pboName = finalName.Replace('/', '\\');
                 keep.Add((i, new FileEntry
                 {
-                    FileName = finalName,
+                    FileName = pboName,
                     TimeStamp = original.TimeStamp,
                     DataSize = original.Size,
                     UncompressedSize = 0,
@@ -184,20 +203,43 @@ namespace BIS.PBO.Deobfuscator
             }
 
             // --- Reference Updating ---
+            // Build normalized path map: original entry path -> output entry path
+            var pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            // First, add recovered (class-based) names so they take priority
+            foreach (var kvp in result.RecoveredNames)
+            {
+                var orig = pbo.Files[kvp.Key].FileName.Replace('\\', '/');
+                var recovered = kvp.Value.Replace('\\', '/');
+                pathMap[orig] = recovered;
+                AddPrefixedPath(pbo.Prefix, orig, recovered, pathMap);
+            }
+            // Then, add all kept entries that were NOT recovered, so their
+            // heuristic/placeholder names are available for reference updating.
+            var recoveredIndices = new HashSet<int>(result.RecoveredNames.Keys);
+            foreach (var (idx, entry) in keep)
+            {
+                if (recoveredIndices.Contains(idx))
+                    continue;
+                var orig = pbo.Files[idx].FileName.Replace('\\', '/');
+                var final = entry.FileName.Replace('\\', '/');
+                if (!pathMap.ContainsKey(orig))
+                    pathMap[orig] = final;
+                AddPrefixedPath(pbo.Prefix, orig, final, pathMap);
+            }
+
+            // Collect modified entry content from reference updaters
+            var modifiedData = new Dictionary<int, byte[]>();
             foreach (var updater in _referenceUpdaters)
             {
-                foreach (var (_, entry) in keep)
+                foreach (var (idx, entry) in keep)
                 {
-                    var fileEntry = pbo.Files.FirstOrDefault(f => f.FileName == entry.FileName);
-                    if (fileEntry != null)
+                    if (modifiedData.ContainsKey(idx))
+                        continue;
+                    var data = updater.UpdateReferences(pbo.Files[idx], pathMap);
+                    if (data != null)
                     {
-                        var nameMap = new Dictionary<string, string>();
-                        foreach (var kvp in result.RecoveredNames)
-                        {
-                            var orig = pbo.Files[kvp.Key].FileName;
-                            nameMap[orig] = kvp.Value;
-                        }
-                        updater.UpdateReferences(pbo, fileEntry, nameMap);
+                        modifiedData[idx] = data;
+                        entry.DataSize = data.Length;
                     }
                 }
             }
@@ -220,10 +262,11 @@ namespace BIS.PBO.Deobfuscator
                 }
                 foreach (var (idx, _) in keep)
                 {
+                    if (modifiedData.TryGetValue(idx, out var data))
+                        target.Write(data, 0, data.Length);
+                    else
                     using (var source = pbo.Files[idx].OpenRead())
-                    {
                         source.CopyTo(target);
-                    }
                 }
                 target.Position = 0;
                 using (var sha1 = SHA1.Create())
@@ -376,6 +419,40 @@ namespace BIS.PBO.Deobfuscator
             output.Write(0); output.Write(0); output.Write(0); output.Write(0); output.Write(0);
         }
 
+        /// Detects a common mod prefix from class names (e.g., "jsoar_", "uksf_").
+        /// Class-name frequency analysis (>70%), with fallback from PBO prefix property.
+        private static string? DetectModPrefix(List<string> classNames, string? pboPrefix)
+        {
+            if (classNames.Count == 0) return null;
+
+            var firstWords = classNames
+                .Select(n => n.Split('_')[0])
+                .Where(w => w.Length >= 2)
+                .GroupBy(w => w, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new { Word = g.Key, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            if (firstWords.Count > 0)
+            {
+                var mostCommon = firstWords[0];
+                if ((double)mostCommon.Count / classNames.Count >= 0.7)
+                    return mostCommon.Word + "_";
+            }
+
+            if (!string.IsNullOrEmpty(pboPrefix))
+            {
+                var parts = pboPrefix.Split(new[] { '\\', '/' });
+                var lastPart = parts[^1];
+                var tag = lastPart.Split('_')[0];
+                if (tag.Length >= 2 && classNames.Any(n =>
+                    n.StartsWith(tag + "_", StringComparison.OrdinalIgnoreCase)))
+                    return tag.ToLowerInvariant() + "_";
+            }
+
+            return null;
+        }
+
         /// <summary>
         /// Extracts class names from config.bin for heuristic name generation.
         /// </summary>
@@ -421,6 +498,16 @@ namespace BIS.PBO.Deobfuscator
                     }
                     CollectClassNamesInner(nested, names, seen, exclude);
                 }
+            }
+        }
+
+        private static void AddPrefixedPath(string prefix, string orig, string target, Dictionary<string, string> pathMap)
+        {
+            if (!string.IsNullOrEmpty(prefix))
+            {
+                var prefixed = prefix.Replace('\\', '/').TrimEnd('/') + "/" + orig;
+                if (!pathMap.ContainsKey(prefixed))
+                    pathMap[prefixed] = target;
             }
         }
     }

@@ -498,6 +498,7 @@ public class SuffixRecoveryProfile : IObfuscationProfile
                 "launchers", "missiles", "bombs", "mines", "explosives",
                 "throw", "put", "Default", "WeaponSlotInfo", "SlotInfo",
                 "PointerSlot", "MuzzleSlot", "CowsSlot", "UnderbarrelSlot",
+                "MuzzleCoef", "AmmoCoef", "MagazineCoef",
                 "CfgNonAIVehicles", "CfgMarkerColors", "CfgMarkerShapes",
                 "CfgWaypoints", "CfgActionSounds", "CfgCloudlets",
                 "CfgSoundShaders", "CfgSoundSets", "CfgUnitSounds",

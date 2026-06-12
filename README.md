@@ -1,6 +1,6 @@
 # UKSFTA-BIS
 
-**ArmA File Format Library for UKSF Taskforce Alpha development pipeline.**
+**ArmA File Format Library for UKSFTA development pipeline.**
 
 A centralized, cross-platform library providing high-performance reading, manipulation, and serialization capabilities for common Bohemia Interactive ArmA file formats. This library is the foundational core for the UKSFTA mod suite, enabling robust model forensics, auditing, and automated processing.
 
@@ -20,6 +20,34 @@ A centralized, cross-platform library providing high-performance reading, manipu
     *   Standardized build/development workflow.
     *   Modular namespace architecture.
     *   Integrated unit test suite for all modules.
+
+## 🔍 PBO Recovery for Non-Standard Archives
+
+The library includes specialized profiles for handling PBO files that have been corrupted or unstandardized, where standard tools may fail or crash. These profiles use structural heuristics to recover and validate file contents.
+
+### Current Profiles
+
+1. **ModularSuffixRecoveryProfile**:
+   - A flexible profile that uses multiple specialized modules to handle complex obfuscation.
+   - **Detection**: Identifies Cyrillic-based naming and decoy injection patterns.
+   - **Recovery**: Filters decoys, recovers paths from P3D assets, and reconstructs filenames from suffixes.
+
+2. **HeuristicFallbackProfile**:
+   - Detects structural anomalies in PBOs (e.g., high small-file ratios or unusual naming density).
+   - Serves as a catch-all when explicit profiles fail.
+
+3. **Legacy Profiles** (SuffixRecoveryProfile, DecoyInjectionProfile):
+   - Specialized logic for specific, well-known obfuscation variants.
+
+### Usage
+
+To recover and validate a PBO file, use the `PboTool` command-line utility:
+
+```bash
+dotnet run -- analyze <path-to-pbo-file>
+```
+
+The tool will automatically apply the appropriate recovery profiles and report the results, including the number of decoys filtered out and genuine files recovered.
 
 ## 🛠 Setup & Development
 

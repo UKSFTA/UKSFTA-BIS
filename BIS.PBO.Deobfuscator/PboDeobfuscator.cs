@@ -302,7 +302,12 @@ namespace BIS.PBO.Deobfuscator
             {
                 using (var output = new BinaryWriterEx(target, true))
                 {
-                    WriteProperties(output, pbo.PropertiesPairs);
+                    // Strip decoy/obfuscation properties; keep only prefix (and product if set)
+                    var cleanProps = pbo.PropertiesPairs
+                        .Where(p => p.Key.Equals("prefix", StringComparison.OrdinalIgnoreCase) ||
+                                    p.Key.Equals("product", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    WriteProperties(output, cleanProps);
                     WriteBasicHeader(output, keep.Select(k => k.Entry));
                 }
                 foreach (var (idx, _) in keep)

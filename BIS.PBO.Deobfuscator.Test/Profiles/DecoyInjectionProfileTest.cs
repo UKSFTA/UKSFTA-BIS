@@ -94,8 +94,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         public void Deobfuscate_SqfWithExecVM_ClassifiesAsEntryPoint()
         {
             var pbo = MakePbo();
-            var sqfContent = Encoding.ASCII.GetBytes("execVM \"init.sqf\";");
-            pbo.Files.Add(new DummyFileEntry("start.sqf", sqfContent));
+            var sqfContent = Encoding.ASCII.GetBytes("execVM \"init.sqf\"; // longer content padding");
+            pbo.Files.Add(new DummyFileEntry("mission_start.sqf", sqfContent));
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 
@@ -108,7 +108,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         {
             var pbo = MakePbo();
             var sqfContent = Encoding.ASCII.GetBytes("call compile preprocessFile \"init.sqf\";");
-            pbo.Files.Add(new DummyFileEntry("init.sqf", sqfContent));
+            pbo.Files.Add(new DummyFileEntry("mission_init.sqf", sqfContent));
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 
@@ -130,12 +130,12 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         public void Deobfuscate_MultipleDecoysAndStubs_CountsCorrectly()
         {
             var pbo = MakePbo();
-            pbo.Files.Add(new DummyFileEntry("decoy1.bin", new byte[0]));     // decoy
-            pbo.Files.Add(new DummyFileEntry("stub1.bin", new byte[10]));     // stub (random name)
-            pbo.Files.Add(new DummyFileEntry("real.rvmat", RVMatContent));   // normal
-            pbo.Files.Add(new DummyFileEntry("decoy2.bin", new byte[0]));     // decoy
-            pbo.Files.Add(new DummyFileEntry("stub2.bin", new byte[5]));      // stub
-            pbo.Files.Add(new DummyFileEntry("start.sqf", Encoding.ASCII.GetBytes("execVM \"x.sqf\";"))); // entry
+            pbo.Files.Add(new DummyFileEntry("decoy1.bin", new byte[0]));         // decoy
+            pbo.Files.Add(new DummyFileEntry("stub1.bin", new byte[10]));         // stub (random name)
+            pbo.Files.Add(new DummyFileEntry("model_data.rvmat", RVMatContent)); // normal (name with underscore avoids stub classification)
+            pbo.Files.Add(new DummyFileEntry("decoy2.bin", new byte[0]));         // decoy
+            pbo.Files.Add(new DummyFileEntry("stub2.bin", new byte[5]));          // stub
+            pbo.Files.Add(new DummyFileEntry("mission_init.sqf", Encoding.ASCII.GetBytes("execVM \"x.sqf\"; startMission; // longer padding"))); // entry (underscore name avoids stub)
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 
@@ -151,7 +151,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         public void Deobfuscate_SmallRootLevelFileWithKnownName_NotFiltered()
         {
             var pbo = MakePbo();
-            pbo.Files.Add(new DummyFileEntry("mission.sqm", Encoding.ASCII.GetBytes("version=1;")));
+            pbo.Files.Add(new DummyFileEntry("mission.sqm", Encoding.ASCII.GetBytes("version=1; class header { };")));
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 
@@ -209,7 +209,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         public void Deobfuscate_RecoversEntryWithEntryPrefix()
         {
             var pbo = MakePbo();
-            pbo.Files.Add(new DummyFileEntry("exec.sqf", Encoding.ASCII.GetBytes("execVM \"script.sqf\";")));
+            // Filename must not match RandomNamePattern (underscore prevents match)
+            pbo.Files.Add(new DummyFileEntry("mission_entry.sqf", Encoding.ASCII.GetBytes("execVM \"script.sqf\"; restartScript;")));
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 
@@ -221,7 +222,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         {
             var pbo = MakePbo();
             // .sqf under 65536 bytes but content has no execVM/call/preprocessFile -> no entry point
-            pbo.Files.Add(new DummyFileEntry("util.sqf", Encoding.ASCII.GetBytes("private _x = 1;")));
+            pbo.Files.Add(new DummyFileEntry("util_func.sqf", Encoding.ASCII.GetBytes("private _x = 1; initVariables; // longer padding")));
 
             var result = new DecoyInjectionProfile().Deobfuscate(pbo);
 

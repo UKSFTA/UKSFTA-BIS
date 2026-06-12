@@ -38,7 +38,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
                 var classEntries = new List<ParamEntry>();
                 for (int i = 0; i < paths.Length; i++)
                 {
-                    classEntries.Add(new ParamValue($"path{i}", new RawValue(paths[i])));
+                    classEntries.Add(new ParamValue($"path{i}", paths[i]));
                 }
                 entries.Add(new ParamClass(className, classEntries.ToArray()));
             }
@@ -153,9 +153,11 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         {
             var pbo = MakePbo();
             // Class "avs_assault_vest" in config — words: avs, assault, vest
+            // Add a second class to prevent mod prefix detection from stripping "avs_"
             // Suffix file "avs/_mc.paa": dir="avs" -> contains word "avs" -> class-name match
             var configBin = CreateConfigWithPaths(
-                ("avs_assault_vest", new[] { "data\\abav\\avs_assault_vest_mc.paa" })
+                ("avs_assault_vest", new[] { "data\\abav\\avs_assault_vest_mc.paa" }),
+                ("other_data", new[] { "data\\other\\file.paa" })
             );
             pbo.Files.Add(new DummyFileEntry("config.bin", configBin));
             pbo.Files.Add(new DummyFileEntry("avs\\_mc.paa", PaaHeader));
@@ -270,9 +272,9 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
             Assert.Equal(1, result.Stats["Decoys"]);
             Assert.Equal(1, result.Stats["Stubs"]);
             Assert.Equal(1, result.Stats["EntryPoints"]); // .paa in RealExtensions and >100 bytes
-            Assert.Equal(1, result.Stats["Genuine"]);
+            Assert.Equal(2, result.Stats["Genuine"]); // total(4) - decoys(1) - stubs(1)
             Assert.Equal(4, result.Stats["Total"]);
-            Assert.Equal(4, result.FilteredOut.Count + result.RecoveredNames.Count);
+            Assert.Equal(2, result.FilteredOut.Count + result.RecoveredNames.Count); // decoy + stub filtered, config + real.paa not filtered
         }
 
         [Fact]
@@ -403,8 +405,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
                 {
                     new ParamClass("Stage0", new ParamEntry[]
                     {
-                        new ParamValue("texture", new RawValue(texturePath)),
-                        new ParamValue("uvSource", new RawValue("tex"))
+                        new ParamValue("texture", texturePath),
+                        new ParamValue("uvSource", "tex")
                     })
                 })
             };

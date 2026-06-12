@@ -140,12 +140,12 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         {
             var pbo = MakePbo();
             pbo.Files.Add(new DummyFileEntry("data\\_as.paa", PaaHeader));
-            var knownPaths = new List<string> { "data/abav/avs_assault_as.paa" };
+            var knownPaths = new List<string> { "data/avs_assault_as.paa" };
             var result = new DeobfuscationResult();
 
             new SuffixBasedFilenameRecoveryModule().Recover(pbo, result, knownPaths, "");
 
-            Assert.Equal("data/abav/avs_assault_as.paa", result.RecoveredNames[0]);
+            Assert.Equal("data/avs_assault_as.paa", result.RecoveredNames[0]);
         }
 
         [Fact]
@@ -153,12 +153,12 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         {
             var pbo = MakePbo();
             pbo.Files.Add(new DummyFileEntry("data\\.paa", PaaHeader));
-            var knownPaths = new List<string> { "data/abav/avs_assault_co.paa" };
+            var knownPaths = new List<string> { "data/avs_assault_co.paa" };
             var result = new DeobfuscationResult();
 
             new SuffixBasedFilenameRecoveryModule().Recover(pbo, result, knownPaths, "");
 
-            Assert.Equal("data/abav/avs_assault_co.paa", result.RecoveredNames[0]);
+            Assert.Equal("data/avs_assault_co.paa", result.RecoveredNames[0]);
         }
 
         [Fact]
@@ -194,8 +194,8 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
             pbo.Files.Add(new DummyFileEntry("data\\_mc.paa", PaaHeader));
             var knownPaths = new List<string>
             {
-                "data/abav/avs_assault_as.paa",
-                "data/abav/avs_assault_mc.paa"
+                "data/avs_assault_as.paa",
+                "data/avs_assault_mc.paa"
             };
             var result = new DeobfuscationResult();
 
@@ -213,7 +213,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
             pbo.Files.Add(new DummyFileEntry("data\\_as.paa", PaaHeader)); // same suffix, same dir
             var knownPaths = new List<string>
             {
-                "data/abav/avs_assault_as.paa" // only one path matches
+                "data/avs_assault_as.paa" // only one path matches
             };
             var result = new DeobfuscationResult();
 

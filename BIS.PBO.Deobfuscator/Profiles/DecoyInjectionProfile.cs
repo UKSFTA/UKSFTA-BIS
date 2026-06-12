@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using BIS.P3D;
 using BIS.PBO;
+using BIS.PBO.Deobfuscator.Profiles.Specialized;
 
 namespace BIS.PBO.Deobfuscator.Profiles
 {
@@ -142,6 +144,55 @@ namespace BIS.PBO.Deobfuscator.Profiles
                     catch { /* Skip unreadable files */ }
                 }
             }
+
+            int p3dScanned = 0;
+            int p3dPaths = 0;
+            var knownPaths = new List<string>();
+
+            for (int i = 0; i < pbo.Files.Count; i++)
+            {
+                var file = pbo.Files[i];
+                var ext = Path.GetExtension(file.FileName);
+                if (!string.Equals(ext, ".p3d", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    using var stream = file.OpenRead();
+                    var p3d = new BIS.P3D.P3D(stream);
+                    p3dScanned++;
+
+                    foreach (var lod in p3d.LODs)
+                    {
+                        foreach (var tex in lod.GetTextures())
+                        {
+                            var norm = ProfileUtils.NormalizePath(tex);
+                            if (!string.IsNullOrEmpty(norm) &&
+                                ProfileUtils.IsValidPathString(norm) &&
+                                !knownPaths.Contains(norm))
+                            {
+                                knownPaths.Add(norm);
+                                p3dPaths++;
+                            }
+                        }
+                        foreach (var mat in lod.GetMaterials())
+                        {
+                            var norm = ProfileUtils.NormalizePath(mat);
+                            if (!string.IsNullOrEmpty(norm) &&
+                                ProfileUtils.IsValidPathString(norm) &&
+                                !knownPaths.Contains(norm))
+                            {
+                                knownPaths.Add(norm);
+                                p3dPaths++;
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (p3dScanned > 0)
+                Console.WriteLine($"  -> Scanned {p3dScanned} P3D files, extracted {p3dPaths} unique paths.");
 
             result.Stats["Decoys"] = decoys;
             result.Stats["Stubs"] = stubs;

@@ -24,6 +24,7 @@ namespace BIS.PBO.Deobfuscator
         {
             _profiles = new List<IObfuscationProfile>
             {
+                new DecoyInjectionProfile(),
                 new ModularSuffixRecoveryProfile(),
                 new SuffixRecoveryProfile(),
                 new HeuristicFallbackProfile()

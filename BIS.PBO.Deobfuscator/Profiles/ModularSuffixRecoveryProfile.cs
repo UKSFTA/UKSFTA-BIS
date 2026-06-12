@@ -15,8 +15,7 @@ namespace BIS.PBO.Deobfuscator.Profiles
         {
             _detectionModules = new List<IDetectionModule>
             {
-                new CyrillicDetectionModule(),
-                new DecoyDetectionModule()
+                new CyrillicDetectionModule()
             };
             _recoveryModules = new List<IRecoveryModule>
             {

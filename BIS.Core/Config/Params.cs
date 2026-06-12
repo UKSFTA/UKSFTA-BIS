@@ -361,6 +361,11 @@ $@"{classHead}
             Value = v;
         }
 
+        public void SetValue(string v)
+        {
+            Value = v;
+        }
+
         public RawValue(BinaryReaderEx input) : this(input, (ValueType)input.ReadByte()) { }
 
         public RawValue(BinaryReaderEx input, ValueType type)

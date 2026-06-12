@@ -5,6 +5,6 @@ namespace BIS.PBO.Deobfuscator
 {
     public interface IReferenceUpdater
     {
-        void UpdateReferences(PBO pbo, IPBOFileEntry fileEntry, Dictionary<string, string> pathMap);
+        byte[] UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap);
     }
 }

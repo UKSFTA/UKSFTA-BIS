@@ -175,6 +175,7 @@ namespace BIS.PBO.Deobfuscator.Test.Format
             writer.Write((byte)0); // null terminator
             writer.Write(0u);   // PaxSuffixType
             writer.Write(0);    // mipCount (no additional mips beyond what's counted)
+            writer.Write(0u);   // PaxFileSize
 
             return ms.ToArray();
         }

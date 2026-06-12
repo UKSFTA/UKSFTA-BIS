@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\BIS.PBO\BIS.PBO.csproj" />
     <ProjectReference Include="..\..\BIS.PBO.Deobfuscator\BIS.PBO.Deobfuscator.csproj" />
+    <ProjectReference Include="..\..\BIS.PAA\BIS.PAA.csproj" />
   </ItemGroup>
 
 </Project>

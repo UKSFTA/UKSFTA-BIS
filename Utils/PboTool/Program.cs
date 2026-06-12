@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CommandLine;
+using BIS.PAA;
 using BIS.PBO;
 using BIS.PBO.Deobfuscator;
 
@@ -32,6 +33,9 @@ namespace PboTool
         {
             [Value(0, Required = true, HelpText = "Input PBO file")]
             public string Input { get; set; }
+
+            [Option('r', "recovered", HelpText = "Show recovered filenames (runs deobfuscation)")]
+            public bool Recovered { get; set; }
         }
 
         [Verb("analyze", HelpText = "Detect obfuscation patterns in a PBO")]
@@ -102,8 +106,40 @@ namespace PboTool
             using var pbo = new PBO(opts.Input);
             Console.WriteLine($"Prefix: {pbo.Prefix ?? "(none)"}");
             Console.WriteLine($"Files: {pbo.Files.Count}");
-            foreach (var f in pbo.Files)
-                Console.WriteLine($"  {f.FileName}  ({f.Size} bytes)");
+
+            if (opts.Recovered)
+            {
+                var deobf = new PboDeobfuscator();
+                var result = QuietProcess(deobf, pbo);
+                Console.WriteLine($"\nRecovered names:");
+                for (int i = 0; i < pbo.Files.Count; i++)
+                {
+                    var entry = pbo.Files[i];
+                    var name = result.RecoveredNames.TryGetValue(i, out var r)
+                        ? r
+                        : entry.FileName;
+                    var marker = result.RecoveredNames.ContainsKey(i) ? " ✓" : "";
+
+                    string texType = "";
+                    if (name.EndsWith(".paa", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            using var stream = entry.OpenRead();
+                            var info = PaaAnalyzer.Analyze(stream);
+                            texType = $"  [{info.CategoryLabel}]";
+                        }
+                        catch { texType = "  [?]"; }
+                    }
+
+                    Console.WriteLine($"  {i,4}: {name}  ({entry.Size,8} bytes){texType}{marker}");
+                }
+            }
+            else
+            {
+                foreach (var f in pbo.Files)
+                    Console.WriteLine($"  {f.FileName}  ({f.Size} bytes)");
+            }
             return 0;
         }
 
@@ -123,7 +159,7 @@ namespace PboTool
                 Console.WriteLine($"  {k} = {v}");
 
             var deobf = new PboDeobfuscator();
-            var result = deobf.Process(pbo);
+            var result = QuietProcess(deobf, pbo);
 
             if (result.IsObfuscated)
             {
@@ -132,6 +168,28 @@ namespace PboTool
                     Console.WriteLine($"  {k}: {v}");
                 if (result.FilteredOut.Count > 0)
                     Console.WriteLine($"  Entries to discard: {result.FilteredOut.Count}");
+
+                if (result.RecoveredNames.Count > 0)
+                {
+                    Console.WriteLine($"\nRecovered filenames ({result.RecoveredNames.Count} entries):");
+                    foreach (var kvp in result.RecoveredNames)
+                    {
+                        var entry = pbo.Files[kvp.Key];
+                        var original = entry.FileName;
+                        string texType = "";
+                        if (kvp.Value.EndsWith(".paa", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                using var stream = entry.OpenRead();
+                                var info = PaaAnalyzer.Analyze(stream);
+                                texType = $"  [{info.CategoryLabel}]";
+                            }
+                            catch { texType = "  [?]"; }
+                        }
+                        Console.WriteLine($"  [{kvp.Key,4}] {original}  →  {kvp.Value}{texType}");
+                    }
+                }
             }
             else
             {
@@ -178,7 +236,7 @@ namespace PboTool
                 }
             }
 
-            PboDeobfuscator.Rebuild(pbo, result, output);
+            deobf.Rebuild(pbo, result, output);
             return 0;
         }
 
@@ -275,7 +333,7 @@ namespace PboTool
                     }
                     else
                     {
-                        PboDeobfuscator.Rebuild(pbo, result, outPath);
+                        deobf.Rebuild(pbo, result, outPath);
                         Console.WriteLine($"[FIXED] {rel}");
                     }
                     fixed_++;
@@ -289,6 +347,20 @@ namespace PboTool
 
             Console.WriteLine($"\nDone: {fixed_} fixed, {skipped} clean/skipped, {errors} errors");
             return errors > 0 ? 1 : 0;
+        }
+
+        static DeobfuscationResult QuietProcess(PboDeobfuscator deobf, PBO pbo)
+        {
+            var original = Console.Out;
+            Console.SetOut(TextWriter.Null);
+            try
+            {
+                return deobf.Process(pbo);
+            }
+            finally
+            {
+                Console.SetOut(original);
+            }
         }
     }
 }

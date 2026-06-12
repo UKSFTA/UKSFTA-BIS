@@ -95,7 +95,7 @@ namespace BIS.PBO.Deobfuscator
         /// so Cyrillic obfuscation names match the pathMap keys (which come from ReadUTF8z()).
         /// Pure-ASCII paths pass through unchanged.
         /// </summary>
-        private static string FixEncoding(string s)
+        internal static string FixEncoding(string s)
         {
             var bytes = new byte[s.Length];
             bool needsFix = false;

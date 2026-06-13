@@ -8,7 +8,7 @@ using BIS.Core.Config;
 using BIS.Core.Streams;
 using ConfigValueType = BIS.Core.Config.ValueType;
 
-namespace BIS.PBO.Deobfuscator.Test
+namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
 {
     public class RVMATReferenceUpdaterTest
     {

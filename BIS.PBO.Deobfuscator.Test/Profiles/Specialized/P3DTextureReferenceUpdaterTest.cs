@@ -9,7 +9,7 @@ using BIS.Core.Math;
 using BIS.Core.Streams;
 using BIS.PBO;
 
-namespace BIS.PBO.Deobfuscator.Test
+namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
 {
     public class P3DTextureReferenceUpdaterTest
     {

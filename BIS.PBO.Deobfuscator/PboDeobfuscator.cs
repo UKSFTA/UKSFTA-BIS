@@ -113,10 +113,13 @@ namespace BIS.PBO.Deobfuscator
         /// </summary>
         public void Rebuild(PBO pbo, DeobfuscationResult result, string outputPath)
         {
+            // Parse config.bin once — reused by class naming, model map, and image map
+            var root = pbo.GetRootConfig()?.Root;
+
             // Build dir-word → class list from config.bin class names
             // (class names are clean even when file paths in config are obfuscated)
             var wordToClasses = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            var classNames = ExtractDeobfuscatorClassNames(pbo);
+            var classNames = root != null ? ExtractDeobfuscatorClassNames(root) : new List<string>();
             var modPrefix = DetectModPrefix(classNames, pbo.Prefix);
             foreach (var cls in classNames)
             {
@@ -142,9 +145,9 @@ namespace BIS.PBO.Deobfuscator
             int zeroBytesSkipped = 0;
 
             // Build config model path -> class name map for .p3d naming
-            var configModelMap = BuildConfigModelMap(pbo);
+            var configModelMap = root != null ? BuildConfigModelMap(root, pbo.Prefix) : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             // Build config image path -> variant name map for icon naming (acex, etc.)
-            var configImageMap = BuildConfigImageMap(pbo);
+            var configImageMap = root != null ? BuildConfigImageMap(root) : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 0; i < pbo.Files.Count; i++)
             {
@@ -524,7 +527,7 @@ namespace BIS.PBO.Deobfuscator
         /// <summary>
         /// Extracts class names from config.bin for heuristic name generation.
         /// </summary>
-        private static List<string> ExtractDeobfuscatorClassNames(PBO pbo)
+        private static List<string> ExtractDeobfuscatorClassNames(ParamClass root)
         {
             var results = new List<string>();
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -544,10 +547,7 @@ namespace BIS.PBO.Deobfuscator
                 "CfgMusic", "CfgRadio", "CfgVoice", "CfgSFX",
                 "CfgWorlds", "CfgWorldList"
             };
-            var config = pbo.GetRootConfig();
-            if (config?.Root == null)
-                return results;
-            CollectClassNamesInner(config.Root, results, seen, exclude);
+            CollectClassNamesInner(root, results, seen, exclude);
             return results;
         }
 
@@ -585,14 +585,10 @@ namespace BIS.PBO.Deobfuscator
         /// PBO entry raw names store the relative path without the prefix ("model\....p3d").
         /// This method normalises both sides and picks the best class name for each unique model.
         /// </summary>
-        private static Dictionary<string, string> BuildConfigModelMap(PBO pbo)
+        private static Dictionary<string, string> BuildConfigModelMap(ParamClass root, string? pboPrefix)
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var root = pbo.GetRootConfig()?.Root;
-            if (root == null)
-                return map;
-
-            var prefix = (pbo.Prefix ?? "").Replace('\\', '/').TrimEnd('/');
+            var prefix = (pboPrefix ?? "").Replace('\\', '/').TrimEnd('/');
             CollectModelPaths(root, map, prefix);
             return map;
         }
@@ -640,13 +636,9 @@ namespace BIS.PBO.Deobfuscator
         /// parent class (variant) name. Enables semantic naming of icon
         /// files (e.g. acex_001.paa → acex/mc.paa).
         /// </summary>
-        private static Dictionary<string, string> BuildConfigImageMap(PBO pbo)
+        private static Dictionary<string, string> BuildConfigImageMap(ParamClass root)
         {
             var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var root = pbo.GetRootConfig()?.Root;
-            if (root == null)
-                return map;
-
             CollectImagePaths(root, map);
             return map;
         }

@@ -291,9 +291,9 @@ __pycache__/
 _testdata_untracked/
 _test_screenshots/
 
-# WIP utility projects
-Utils/PboSpy/
-Utils/PboSpy.Test/
+# Utility and Extra projects
+Extras/
+Utils/
 
 # Agent-specific metadata
 .omo/

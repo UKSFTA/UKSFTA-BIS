@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CommandLine;
+using BIS.Core.Config;
 using BIS.PAA;
 using BIS.PBO;
 using BIS.PBO.Deobfuscator;
+using BIS.PBO.Deobfuscator.Profiles.Specialized;
 
 namespace PboTool
 {
@@ -36,6 +38,9 @@ namespace PboTool
 
             [Option('r', "recovered", HelpText = "Show recovered filenames (runs deobfuscation)")]
             public bool Recovered { get; set; }
+
+            [Option('o', "obfuscated", HelpText = "When combined with --recovered, show only entries that were recovered")]
+            public bool Obfuscated { get; set; }
         }
 
         [Verb("analyze", HelpText = "Detect obfuscation patterns in a PBO")]
@@ -56,6 +61,12 @@ namespace PboTool
 
             [Option('l', "list", HelpText = "Show recovered names during fix")]
             public bool List { get; set; }
+
+            [Option('x', "extract", HelpText = "Extract rebuilt PBO to output directory")]
+            public bool Extract { get; set; }
+
+            [Option('v', "verify", HelpText = "Verify all config paths resolve after rebuild")]
+            public bool Verify { get; set; }
         }
 
         [Verb("create", HelpText = "Create a PBO from a directory")]
@@ -111,10 +122,13 @@ namespace PboTool
             {
                 var deobf = new PboDeobfuscator();
                 var result = QuietProcess(deobf, pbo);
-                Console.WriteLine($"\nRecovered names:");
+                int shown = 0;
                 for (int i = 0; i < pbo.Files.Count; i++)
                 {
                     var entry = pbo.Files[i];
+                    if (opts.Obfuscated && !result.RecoveredNames.ContainsKey(i))
+                        continue;
+
                     var name = result.RecoveredNames.TryGetValue(i, out var r)
                         ? r
                         : entry.FileName;
@@ -133,7 +147,10 @@ namespace PboTool
                     }
 
                     Console.WriteLine($"  {i,4}: {name}  ({entry.Size,8} bytes){texType}{marker}");
+                    shown++;
                 }
+                if (shown == 0)
+                    Console.WriteLine("  (no entries)");
             }
             else
             {
@@ -237,6 +254,33 @@ namespace PboTool
             }
 
             deobf.Rebuild(pbo, result, output);
+            Console.WriteLine($"Output: {output}");
+
+            if (opts.Extract)
+            {
+                var extractDir = Path.Combine(
+                    Path.GetDirectoryName(output) ?? ".",
+                    Path.GetFileNameWithoutExtension(output));
+                Directory.CreateDirectory(extractDir);
+                using var fixedPbo = new PBO(output);
+                fixedPbo.ExtractFiles(fixedPbo.Files, extractDir);
+                Console.WriteLine($"Extracted to {extractDir}/");
+            }
+
+            if (opts.Verify)
+            {
+                Console.WriteLine("\nVerifying references...");
+                var issues = VerifyReferences(output);
+                if (issues.Count == 0)
+                    Console.WriteLine("All references resolve correctly.");
+                else
+                {
+                    Console.WriteLine($"Found {issues.Count} issue(s):");
+                    foreach (var issue in issues)
+                        Console.WriteLine($"  {issue}");
+                }
+            }
+
             return 0;
         }
 
@@ -347,6 +391,30 @@ namespace PboTool
 
             Console.WriteLine($"\nDone: {fixed_} fixed, {skipped} clean/skipped, {errors} errors");
             return errors > 0 ? 1 : 0;
+        }
+
+        static List<string> VerifyReferences(string pboPath)
+        {
+            var issues = new List<string>();
+            using var pbo = new PBO(pboPath);
+
+            var fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var f in pbo.Files)
+                fileNames.Add(f.FileName);
+
+            var config = pbo.GetRootConfig();
+            if (config != null)
+            {
+                var configPaths = ProfileUtils.ExtractPathsFromRap(config.Root);
+                foreach (var path in configPaths)
+                {
+                    var normalized = path.Replace('/', '\\');
+                    if (!fileNames.Contains(normalized))
+                        issues.Add($"Config path not found: {path}");
+                }
+            }
+
+            return issues;
         }
 
         static DeobfuscationResult QuietProcess(PboDeobfuscator deobf, PBO pbo)

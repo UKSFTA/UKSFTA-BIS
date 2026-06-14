@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-PROJECT_ROOT=$(pwd)
-export SOURCE_DATE_EPOCH=$(date +%s)
+SOURCE_DATE_EPOCH=$(date +%s)
+export SOURCE_DATE_EPOCH
 
 # CONFIG defaults
 CONFIG="Debug"
-IS_RELEASE=false
 
 if [[ " $* " == *" release "* ]]; then
     CONFIG="Release"
-    IS_RELEASE=true
 fi
 
 build_target() {

@@ -1,0 +1,75 @@
+name: Lint
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_VERSION: 10.0.x
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: redhat-plumbers/action-shellcheck@v3
+        with:
+          severity: warning
+          check_together: 'yes'
+
+  powershell-analysis:
+    name: PowerShell Script Analyzer
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Install-Module -Name PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Analyze download.ps1
+        shell: pwsh
+        run: |
+          $results = Invoke-ScriptAnalyzer -Path _testdata/download.ps1 -Recurse
+          if ($results) {
+              $results | Format-Table -AutoSize
+              $errors   = $results | Where-Object { $_.Severity -eq 'Error' }
+              $warnings = $results | Where-Object { $_.Severity -eq 'Warning' }
+              if ($errors.Count -gt 0) {
+                  Write-Host "::error::PSScriptAnalyzer found $($errors.Count) error(s) and $($warnings.Count) warning(s)"
+                  exit 1
+              }
+              if ($warnings.Count -gt 0) {
+                  Write-Host "::warning::PSScriptAnalyzer found $($warnings.Count) warning(s) (no errors)"
+              }
+          } else {
+              Write-Host "PSScriptAnalyzer passed with no issues."
+          }
+
+  dotnet-format:
+    name: dotnet format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Check formatting
+        run: dotnet format --verify-no-changes

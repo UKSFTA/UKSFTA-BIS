@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Stringtable XML read/write/analyze for Arma 3 localization files</Description>
+  </PropertyGroup>
+
+</Project>

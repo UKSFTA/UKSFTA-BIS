@@ -1,14 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Description>PBO obfuscation reversal with config-driven profile system and reference updaters</Description>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\BIS.PBO\BIS.PBO.csproj" />
     <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
   </ItemGroup>
-
-  <PropertyGroup>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">

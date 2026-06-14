@@ -1,20 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Authors>Braini01, GrueArbre</Authors>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <RepositoryUrl>https://github.com/Braini01/bis-file-formats</RepositoryUrl>
-    <Description>EBO (Encrypted/Elite Binary Object) format library for encrypted PBO files</Description>
+    <Description>EBO encrypted PBO format reading with RC4 decryption support</Description>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Include="..\LICENSE">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\BIS.PBO\BIS.PBO.csproj" />

@@ -3,4 +3,23 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
+
+  <!-- Shared NuGet packaging properties (overridable per-project) -->
+  <PropertyGroup>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <Authors>Braini01, GrueArbre</Authors>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <RepositoryUrl>https://github.com/UKSFTA/UKSFTA-BIS</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/UKSFTA/UKSFTA-BIS</PackageProjectUrl>
+    <PackageTags>arma;bis;arma3</PackageTags>
+    <Copyright>Copyright (c) UKSFTA-BIS Contributors</Copyright>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\LICENSE" Pack="True" PackagePath="" />
+  </ItemGroup>
 </Project>

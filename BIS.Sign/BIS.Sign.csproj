@@ -1,18 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <Authors>Braini01, GrueArbre</Authors>
-    <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <RepositoryUrl>https://github.com/Braini01/bis-file-formats</RepositoryUrl>
-    <Description>BISign file format and RSA signing for Arma PBO files</Description>
+    <Description>BISign V3/V4 format, RSA key generation, and PBO signing with verification</Description>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Include="..\LICENSE">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
-  </ItemGroup>
 
 </Project>

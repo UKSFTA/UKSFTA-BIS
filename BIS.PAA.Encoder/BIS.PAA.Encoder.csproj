@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <Description>DXT1/DXT5 PAA texture encoding with mipmap generation (via BCnEncoder.Net)</Description>
   </PropertyGroup>
 
   <ItemGroup>

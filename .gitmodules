@@ -1,0 +1,3 @@
+[submodule "docs"]
+	path = docs
+	url = git@github.com:UKSFTA/UKSFTA-BIS.wiki.git

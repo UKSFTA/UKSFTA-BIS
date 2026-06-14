@@ -10,6 +10,9 @@ namespace BIS.P3D.ODOL
 {
     public class LOD : ILevelOfDetail
     {
+        private string[] _selections;
+        private string[] _proxies;
+
         internal LOD(BinaryReaderEx input, float resolution, LoadableLodInfo loadableLodInfo, int version)
         {
             var st = input.Position;
@@ -46,6 +49,11 @@ namespace BIS.P3D.ODOL
 
             Sections = input.ReadArray(i => new Section(i, version));
             NamedSelections = input.ReadArray(i => new NamedSelection(i, version));
+            _selections = NamedSelections.Select(ns => ns.Name).ToArray();
+            _proxies = RawProxies.Select(p =>
+                p.NamedSelectionIndex >= 0 && p.NamedSelectionIndex < NamedSelections.Length
+                    ? NamedSelections[p.NamedSelectionIndex].Name
+                    : null).Where(n => n != null).ToArray();
             NamedProperties = input.ReadArray(i => new Tuple<string, string>(i.ReadAsciiz(), i.ReadAsciiz()));
 
 
@@ -140,20 +148,28 @@ namespace BIS.P3D.ODOL
         public Vector3P BCenter { get; }
         public float BRadius { get; }
         public string[] Textures { get; }
-        public string[] Selections => NamedSelections.Select(ns => ns.Name).ToArray();
-        string[] ILevelOfDetail.Proxies =>
-            NamedSelections == null
-                ? Array.Empty<string>()
-                : RawProxies.Select(p =>
-                    p.NamedSelectionIndex >= 0 && p.NamedSelectionIndex < NamedSelections.Length
-                        ? NamedSelections[p.NamedSelectionIndex].Name
-                        : null).Where(n => n != null).ToArray();
+        public string[] Selections => _selections;
+        string[] ILevelOfDetail.Proxies => _proxies;
         public EmbeddedMaterial[] Materials { get; }
         public TrackedArray<int> PointToVertex { get; }
         public TrackedArray<int> VertexToPoint { get; }
         public Polygons Polygons { get; }
         public Section[] Sections { get; }
-        public NamedSelection[] NamedSelections { get; set; }
+        private NamedSelection[] _namedSelections;
+        public NamedSelection[] NamedSelections
+        {
+            get => _namedSelections;
+            set
+            {
+                _namedSelections = value;
+                _selections = value?.Select(ns => ns.Name).ToArray() ?? Array.Empty<string>();
+                _proxies = value == null ? Array.Empty<string>()
+                    : RawProxies.Select(p =>
+                        p.NamedSelectionIndex >= 0 && p.NamedSelectionIndex < value.Length
+                            ? value[p.NamedSelectionIndex].Name
+                            : null).Where(n => n != null).ToArray();
+            }
+        }
         public Tuple<string, string>[] NamedProperties { get; }
         internal Keyframe[] Frames { get; }
         public int ColorTop { get; }

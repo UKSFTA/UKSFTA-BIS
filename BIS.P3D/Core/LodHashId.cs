@@ -45,26 +45,42 @@ namespace BIS.P3D
 
         public static LodHashId Compute(IEnumerable<Vector3> vectors)
         {
-            var distinct = vectors.Distinct().ToList();
-            if (distinct.Count == 0)
+            // Single pass: distinct + min/max (7 iterations → 1)
+            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+            var set = new HashSet<Vector3>();
+            foreach (var v in vectors)
+            {
+                if (set.Add(v))
+                {
+                    if (v.X < minX) minX = v.X;
+                    if (v.Y < minY) minY = v.Y;
+                    if (v.Z < minZ) minZ = v.Z;
+                    if (v.X > maxX) maxX = v.X;
+                    if (v.Y > maxY) maxY = v.Y;
+                    if (v.Z > maxZ) maxZ = v.Z;
+                }
+            }
+            if (set.Count == 0)
             {
                 return Empty;
             }
-            // Normalize vertex in range [0 - 32767]
-            var minX = (double)distinct.Min(v => v.X);
-            var minY = (double)distinct.Min(v => v.Y);
-            var minZ = (double)distinct.Min(v => v.Z);
-            var deltaX = (double)Math.Max(distinct.Max(v => v.X) - minX, 0.001);
-            var deltaY = (double)Math.Max(distinct.Max(v => v.Y) - minY, 0.001);
-            var deltaZ = (double)Math.Max(distinct.Max(v => v.Z) - minZ, 0.001);
-            var normalized = vectors.Select(v =>
-                new Vector3(
+
+            var deltaX = (double)Math.Max(maxX - minX, 0.001);
+            var deltaY = (double)Math.Max(maxY - minY, 0.001);
+            var deltaZ = (double)Math.Max(maxZ - minZ, 0.001);
+
+            // Normalize from distinct set (no need to revisit original enumerable)
+            var normalized = new List<Vector3>(set.Count);
+            foreach (var v in set)
+            {
+                normalized.Add(new Vector3(
                     (float)Math.Round((v.X - minX) / deltaX * Scale15),
                     (float)Math.Round((v.Y - minY) / deltaY * Scale15),
-                    (float)Math.Round((v.Z - minZ) / deltaZ * Scale15)
-            )).ToList();
+                    (float)Math.Round((v.Z - minZ) / deltaZ * Scale15)));
+            }
 
-            // Merge identical points and sort them to have stable order
+            // Merge identical points (after rounding) and sort for stable order
             normalized = normalized.Distinct()
                 .OrderBy(v => v.X)
                 .ThenBy(v => v.Y)

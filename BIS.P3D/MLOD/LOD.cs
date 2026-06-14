@@ -65,14 +65,37 @@ namespace BIS.P3D.MLOD
             Points = new Point[nPoints];
             Normals = new Vector3P[nNormals];
             Faces = new Face[nFaces];
-            for (int i = 0; i < nPoints; ++i)
+
+            // Bulk-read Points: 3 floats + 1 int = 16 bytes each
+            if (nPoints > 0)
             {
-                Points[i] = new Point(input);
+                var pointBytes = input.ReadBytes(nPoints * 16);
+                for (int i = 0; i < nPoints; i++)
+                {
+                    int offset = i * 16;
+                    Points[i] = new Point(
+                        new Vector3P(
+                            BitConverter.ToSingle(pointBytes, offset),
+                            BitConverter.ToSingle(pointBytes, offset + 4),
+                            BitConverter.ToSingle(pointBytes, offset + 8)),
+                        (PointFlags)BitConverter.ToInt32(pointBytes, offset + 12));
+                }
             }
-            for (int i = 0; i < nNormals; ++i)
+
+            // Bulk-read Normals: 3 floats = 12 bytes each
+            if (nNormals > 0)
             {
-                Normals[i] = new Vector3P(input);
+                var normalBytes = input.ReadBytes(nNormals * 12);
+                for (int i = 0; i < nNormals; i++)
+                {
+                    int offset = i * 12;
+                    Normals[i] = new Vector3P(
+                        BitConverter.ToSingle(normalBytes, offset),
+                        BitConverter.ToSingle(normalBytes, offset + 4),
+                        BitConverter.ToSingle(normalBytes, offset + 8));
+                }
             }
+
             for (int i = 0; i < nFaces; ++i)
             {
                 Faces[i] = new Face(input);

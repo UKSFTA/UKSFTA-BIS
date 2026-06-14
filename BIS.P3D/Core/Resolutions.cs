@@ -79,52 +79,55 @@ namespace BIS.P3D
         public const float SHADOW_MIN = 10000.0f;
         public const float SHADOW_MAX = 20000.0f;
 
-        /// <summary>
-        /// Tells us if the current LOD with given resolution has normal NamedSelections (returns true) or empty ones (return false)
-        /// </summary>
-        /// <param name="r"></param>
-        /// <returns></returns>
+        private static readonly Dictionary<float, LodName> LOD_MAP = new()
+        {
+            { MEMORY, LodName.Memory },
+            { LANDCONTACT, LodName.LandContact },
+            { ROADWAY, LodName.Roadway },
+            { PATHS, LodName.Paths },
+            { HITPOINTS, LodName.HitPoints },
+            { 6e15f, LodName.ViewGeometry },
+            { FIRE_GEOMETRY, LodName.FireGeometry },
+            { 8e15f, LodName.ViewCargoGeometry },
+            { 9e15f, LodName.ViewCargoFireGeometry },
+            { VIEW_COMMANDER, LodName.ViewCommander },
+            { 11e15f, LodName.ViewCommanderGeometry },
+            { 12e15f, LodName.ViewCommanderFireGeometry },
+            { VIEW_GEOMETRY_PILOT, LodName.ViewPilotGeometry },
+            { 14e15f, LodName.ViewPilotFireGeometry },
+            { VIEW_GEOMETRY_GUNNER, LodName.ViewGunnerGeometry },
+            { FIRE_GEOMETRY_GUNNER, LodName.ViewGunnerFireGeometry },
+            { SUBPARTS, LodName.SubParts },
+            { SHADOWVOLUME_CARGO, LodName.ShadowVolumeViewCargo },
+            { SHADOWVOLUME_PILOT, LodName.ShadowVolumeViewPilot },
+            { SHADOWVOLUME_GUNNER, LodName.ShadowVolumeViewGunner },
+            { WRECK, LodName.Wreck },
+            { VIEW_GUNNER, LodName.ViewGunner },
+            { VIEW_PILOT, LodName.ViewPilot },
+            { VIEW_CARGO, LodName.ViewCargo },
+            { GEOMETRY, LodName.Geometry },
+            { PHYSX, LodName.PhysX },
+        };
+
+        private static readonly HashSet<float> KEEPS_NAMED_SELECTIONS = new()
+        {
+            MEMORY, FIRE_GEOMETRY, GEOMETRY, VIEW_GEOMETRY,
+            VIEW_GEOMETRY_PILOT, VIEW_GEOMETRY_GUNNER, VIEW_GEOMETRY_CARGO,
+            PATHS, HITPOINTS, PHYSX, BUOYANCY
+        };
+
         public static bool KeepsNamedSelections(float r)
         {
-            return r == MEMORY || r == FIRE_GEOMETRY || r == GEOMETRY
-                || r == VIEW_GEOMETRY || r == VIEW_GEOMETRY_PILOT || r == VIEW_GEOMETRY_GUNNER
-                || r == VIEW_GEOMETRY_CARGO || r == PATHS || r == HITPOINTS
-                || r == PHYSX || r == BUOYANCY;
+            return KEEPS_NAMED_SELECTIONS.Contains(r);
         }
 
         public static LodName GetLODType(this float res)
         {
-            if (res == specialLod) return LodName.Memory;
-            if (res == 2 * specialLod) return LodName.LandContact;
-            if (res == 3 * specialLod) return LodName.Roadway;
-            if (res == 4 * specialLod) return LodName.Paths;
+            if (LOD_MAP.TryGetValue(res, out var lod))
+                return lod;
 
-            if (res == 5 * specialLod) return LodName.HitPoints;
-            if (res == 6 * specialLod) return LodName.ViewGeometry;
-            if (res == 7 * specialLod) return LodName.FireGeometry;
-            if (res == 8 * specialLod) return LodName.ViewCargoGeometry;
-            if (res == 9 * specialLod) return LodName.ViewCargoFireGeometry;
-            if (res == 10 * specialLod) return LodName.ViewCommander;
-            if (res == 11 * specialLod) return LodName.ViewCommanderGeometry;
-            if (res == 12 * specialLod) return LodName.ViewCommanderFireGeometry;
-            if (res == 13 * specialLod) return LodName.ViewPilotGeometry;
-            if (res == 14 * specialLod) return LodName.ViewPilotFireGeometry;
-            if (res == 15 * specialLod) return LodName.ViewGunnerGeometry;
-            if (res == 16 * specialLod) return LodName.ViewGunnerFireGeometry;
-            if (res == 17 * specialLod) return LodName.SubParts;
-            if (res == 18 * specialLod) return LodName.ShadowVolumeViewCargo;
-            if (res == 19 * specialLod) return LodName.ShadowVolumeViewPilot;
-            if (res == 20 * specialLod) return LodName.ShadowVolumeViewGunner;
-            if (res == 21 * specialLod) return LodName.Wreck;
-
-            if (res == 1000.0f) return LodName.ViewGunner;
-            if (Math.Abs(res - 1100.0f) < 0.01f) return LodName.ViewPilot;
-            if (res == 1200.0f) return LodName.ViewCargo;
-
-            if (res == 1e13f) return LodName.Geometry;
-            if (res == 4e13f) return LodName.PhysX;
-
-            if (res >= 10000.0 && res <= 20000.0) return LodName.ShadowVolume;
+            if (res >= SHADOW_MIN && res <= SHADOW_MAX)
+                return LodName.ShadowVolume;
 
             return LodName.Resolution;
         }

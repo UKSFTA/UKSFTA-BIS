@@ -123,12 +123,14 @@ namespace BIS.P3D.MLOD
 
         public void Read(BinaryReaderEx input, int nPoints, int nFaces)
         {
+            var pointBytes = input.ReadBytes(nPoints);
             LockedPoints = new bool[nPoints];
             for (int index = 0; index < nPoints; ++index)
-                LockedPoints[index] = input.ReadBoolean();
+                LockedPoints[index] = pointBytes[index] != 0;
+            var faceBytes = input.ReadBytes(nFaces);
             LockedFaces = new bool[nFaces];
             for (int index = 0; index < nFaces; ++index)
-                LockedFaces[index] = input.ReadBoolean();
+                LockedFaces[index] = faceBytes[index] != 0;
         }
 
         public override void Write(BinaryWriterEx output)
@@ -200,12 +202,8 @@ namespace BIS.P3D.MLOD
 
         public void Read(BinaryReaderEx input, int nPoints, int nFaces)
         {
-            Points = new byte[nPoints];
-            for (int index = 0; index < nPoints; ++index)
-                Points[index] = input.ReadByte();
-            Faces = new byte[nFaces];
-            for (int index = 0; index < nFaces; ++index)
-                Faces[index] = input.ReadByte();
+            Points = input.ReadBytes(nPoints);
+            Faces = input.ReadBytes(nFaces);
         }
         public override void Write(BinaryWriterEx output)
         {
@@ -268,12 +266,8 @@ namespace BIS.P3D.MLOD
 
         public void Read(BinaryReaderEx input, int nPoints, int nFaces)
         {
-            WeightedPoints = new byte[nPoints];
-            for (int index = 0; index < nPoints; ++index)
-                WeightedPoints[index] = input.ReadByte();
-            Faces = new byte[nFaces];
-            for (int index = 0; index < nFaces; ++index)
-                Faces[index] = input.ReadByte();
+            WeightedPoints = input.ReadBytes(nPoints);
+            Faces = input.ReadBytes(nFaces);
         }
 
         public override void Write(BinaryWriterEx output)

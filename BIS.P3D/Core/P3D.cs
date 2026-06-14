@@ -106,5 +106,8 @@ namespace BIS.P3D
         public ODOL.ODOL ODOL => binarized;
 
         public MLOD.MLOD MLOD => editable;
+
+        public bool IsODOLFormat => binarized != null;
+        public bool IsMLODFormat => editable != null;
     }
 }

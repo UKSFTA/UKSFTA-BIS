@@ -90,7 +90,7 @@ namespace BIS.P3D.ODOL
                 return Enumerable.Repeat(value, (int)NVertices).ToArray();
             }
 
-            var uvData = UvData.ToArray();
+            var uvData = UvData.Value;
             var result = new Vector2[NVertices];
             for (var pos = 0; pos < NVertices; pos++)
             {

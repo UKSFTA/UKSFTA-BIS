@@ -10,7 +10,7 @@ namespace BIS.Core.Compression
             const int N = 4096;
             const int F = 18;
             const int THRESHOLD = 2;
-            char[] text_buf = new char[N + F - 1];
+            byte[] text_buf = new byte[N + F - 1];
             dst = new byte[expectedSize];
 
             if (expectedSize <= 0) return 0;
@@ -21,7 +21,7 @@ namespace BIS.Core.Compression
 
             int i, j, r, c, csum = 0;
             int flags;
-            for (i = 0; i < N - F; i++) text_buf[i] = ' ';
+            for (i = 0; i < N - F; i++) text_buf[i] = (byte)0x20;
             r = N - F; flags = 0;
             while (bytesLeft > 0)
             {
@@ -42,7 +42,7 @@ namespace BIS.Core.Compression
                     dst[iDst++] = (byte)c;
                     bytesLeft--;
                     // continue decompression
-                    text_buf[r] = (char)c;
+                        text_buf[r] = (byte)c;
                     r++; r &= (N - 1);
                 }
                 else
@@ -61,7 +61,7 @@ namespace BIS.Core.Compression
 
                     for (; ii <= jj; ii++)
                     {
-                        c = (byte)text_buf[ii & (N - 1)];
+                        c = text_buf[ii & (N - 1)];
                         if (useSignedChecksum)
                             csum += (sbyte)c;
                         else
@@ -71,7 +71,7 @@ namespace BIS.Core.Compression
                         dst[iDst++] = (byte)c;
                         bytesLeft--;
                         // continue decompression
-                        text_buf[r] = (char)c;
+                        text_buf[r] = (byte)c;
                         r++; r &= (N - 1);
                     }
                 }

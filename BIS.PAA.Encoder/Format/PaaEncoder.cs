@@ -76,7 +76,7 @@ namespace BIS.PAA.Encoder
             var mipmaps = new List<MipmapEncoder>();
 
             var width = image.Width;
-            var height = image.Width;
+            var height = image.Height;
             var offset = type == PAAType.DXT5 ? 128 : 112;
             foreach (var mipmap in enc.EncodeToRawBytes(image))
             {

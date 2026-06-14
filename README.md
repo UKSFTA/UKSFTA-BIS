@@ -165,7 +165,142 @@ The library is organized into 14 library projects plus test and utility projects
 | `BIS.WRP` | World / terrain object configuration parsing |
 | `BIS.ALB` | Arla bytecode analysis |
 | `BIS.Sign` | BIS public-key signature reading and generation |
+| `BIS.SQF` | SQF tokenizer, Pratt parser, linter (20 rules), formatter |
+| `BIS.Stringtable` | Stringtable XML parser and linter (6 rules) |
+| `BIS.CLI` | `bis` CLI tool: lint, format, pack, convert, inspect |
 | `BIS.IntegrationTest` | Cross-format integration tests against real game data |
+
+## 🛠 CLI Tool (`bis`)
+
+The `bis` CLI provides all library functionality from the command line:
+
+```bash
+# Lint config files (accepts files or directories, recursive)
+bis lint config source/ --exit-code
+bis lint config config.cpp --json
+bis lint config source/ --fix
+
+# Lint SQF scripts
+bis lint sqf source/
+bis lint sqf source/ --fix
+
+# Lint stringtable XML
+bis lint stringtable source/
+
+# Lint PBO archives
+bis lint pbo *.pbo
+
+# Format SQF scripts
+bis fmt sqf source/           # format in-place
+bis fmt sqf source/ --check   # CI check (exit 1 if unformatted)
+
+# Pack/unpack PBO archives
+bis pbo list archive.pbo
+bis pbo extract archive.pbo -o output/
+bis pbo pack source/ -o output.pbo -p my_prefix -c
+
+# Config serialization
+bis config serialize config.cpp -o output.txt
+
+# Inspect models
+bis p3d info model.p3d
+bis p3d validate model.p3d
+bis p3d convert model.p3d -o converted.mlod
+
+# Analyze textures
+bis paa analyze texture.paa
+bis paa suggest texture.paa
+```
+
+All `lint` commands support `--json` for structured output and `--exit-code` for CI pipelines.
+
+## 🔍 Linting Overview
+
+The library ships four format-specific linters that replicate HEMTT's lint rule set:
+
+### Config Linter (L-Cxx) — 12 rules
+| Rule | Severity | Description | Fix |
+|---|---|---|---|
+| L-C02 | Error | Duplicate property | — |
+| L-C03 | Error | Duplicate class | — |
+| L-C04 | Error | Missing external base class | ✓ |
+| L-C05 | Warning | External parent case mismatch | ✓ |
+| L-C07 | Error | Expected `[]` array suffix on array value | — |
+| L-C09 | Error | Missing magazine in CfgMagazineWells | — |
+| L-C11 | Warning | Unusual file extension on property | — |
+| L-C12 | Help | Quoted math could be unquoted | ✓ |
+| L-C13 | Help | Unnecessary `_this call` in callback | ✓ |
+| L-C14 | Warning | Unused extern class declaration | ✓ |
+| L-C15 | Warning | CfgPatches references missing class | — |
+| L-C16 | Warning | File reference starts with path separator | — |
+
+### SQF Linter (L-Sxx) — 20 rules
+| Rule | Severity | Description | Fix |
+|---|---|---|---|
+| L-S01 | Warning | Tab character in source | ✓ |
+| L-S02 | Warning | Inconsistent indentation (mixed tabs+spaces) | — |
+| L-S04 | Help | Wrong command casing | ✓ |
+| L-S05 | Error | Assignment in `if`/`while` condition (use `==`) | ✓ |
+| L-S06 | Help | `find` result compared with `> -1` (use `>= 0`) | — |
+| L-S11 | Help | `if (!x) then { ... } else` (swap branches) | — |
+| L-S12 | Warning | Unused local variable | — |
+| L-S13 | Warning | Unused parameter | — |
+| L-S14 | Warning | Variable shadows outer scope declaration | — |
+| L-S15 | Warning | Unused assignment (value overwritten before read) | — |
+| L-S16 | Warning | Missing `private` on local variable | ✓ |
+| L-S17 | Help | All-caps local variable (use lowercase) | ✓ |
+| L-S18 | Warning | Vehicle check with `isNull` instead of `isNull objectParent` | — |
+| L-S19 | Help | Extra `!` negation | ✓ |
+| L-S20 | Warning | Boolean comparison with `== true`/`== false` | ✓ |
+| L-S21 | Error | Impossible range comparison (`_x < 5 && _x > 10`) | — |
+| L-S23 | Warning | Reassigning reserved variable | — |
+| L-S24 | Warning | Magic number literal (except 0/1/-1/100/255) | — |
+| L-S25 | Help | `count == 0` (use `isEqualTo []`) | ✓ |
+| L-S27 | Help | `select count _x - 1` (use `select -1`) | ✓ |
+| L-S36 | Error | Global variable declared with `private` | ✓ |
+
+### Stringtable Linter (L-Lxx) — 6 rules
+| Rule | Severity | Description |
+|---|---|---|
+| L-L01 | Warning | Keys not alphabetically sorted |
+| L-L03 | Warning | Translation has leading/trailing whitespace |
+| L-L04 | Warning | Unknown language code |
+| L-L05 | Error | Key with no translations |
+| L-L06 | Warning | Empty translation value |
+| L-L07 | Warning | Missing `Original` language |
+
+### PBO Linter (L-Pxx) — 5 rules
+| Rule | Severity | Description |
+|---|---|---|
+| L-P01 | Error | Duplicate file entries |
+| L-P02 | Warning | Obfuscated entry name (raw ≠ sanitized) |
+| L-P03 | Warning | Missing or empty `prefix` property |
+| L-P04 | Warning | Empty PBO (no files) |
+| L-P05 | Warning | Zero timestamp on non-empty entry |
+
+### Preprocessor (PWx) — 2 rules
+| Rule | Severity | Description |
+|---|---|---|
+| PW1 | Warning | Unused `#define` macro |
+| PW2 | Warning | Missing `#include` file |
+
+## ✨ SQF Formatting
+
+`bis fmt sqf` auto-formats SQF scripts with consistent style. Configurable options:
+
+| Option | Default | Description |
+|---|---|---|
+| Indent size | 4 | Spaces per indent level |
+| Use tabs | false | Use `\t` instead of spaces |
+| Brace style | K&R | `KAndR` (same line) or `Allman` (new line) |
+
+```bash
+# Check style (CI mode)
+bis fmt sqf source/ --check
+
+# Format in place (default)
+bis fmt sqf source/
+```
 
 ## 🤖 CI / CD
 

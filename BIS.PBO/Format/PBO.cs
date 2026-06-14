@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Security.Cryptography;
 using BIS.Core;
+using BIS.Core.Compression;
 using BIS.Core.Streams;
 
 namespace BIS.PBO
@@ -35,8 +37,8 @@ namespace BIS.PBO
         [Obsolete]
         public LinkedList<string> Properties { get; } = new LinkedList<string>();
         public List<KeyValuePair<string, string>> PropertiesPairs { get; } = new List<KeyValuePair<string, string>>();
-        public int DataOffset { get; private set; }
-        public string Prefix { get; private set; }
+        public int DataOffset { get; protected set; }
+        public string Prefix { get; protected set; }
         public string FileName => Path.GetFileName(PBOFilePath);
 
         static PBO()
@@ -123,6 +125,7 @@ namespace BIS.PBO
             }
 
             // Post-process to guess extensions for completely unknown files
+#pragma warning disable CS0612 // FileEntries is obsolete but needed for mutable FileName access
             foreach (var entry in FileEntries)
             {
                 if (entry.FileName.StartsWith("_unknown\\_unknown_file") && !entry.FileName.Contains("."))
@@ -130,6 +133,7 @@ namespace BIS.PBO
                     entry.FileName += GuessExtension(entry);
                 }
             }
+#pragma warning restore CS0612
         }
 
         private string GuessExtension(FileEntry entry)
@@ -141,7 +145,7 @@ namespace BIS.PBO
             {
                 pboFileStream.Position = DataOffset + entry.StartOffset;
                 byte[] magic = new byte[4];
-                pboFileStream.Read(magic, 0, 4);
+                pboFileStream.ReadExactly(magic, 0, 4);
 
                 // raP\0 = binarized config/rvmat
                 if (magic[0] == 'r' && magic[1] == 'a' && magic[2] == 'P' && magic[3] == '\0')
@@ -159,7 +163,7 @@ namespace BIS.PBO
                 {
                     if (magic[i] == 0 || magic[i] > 127) isText = false;
                 }
-                
+
                 if (isText) return ".sqf";
 
                 return ".bin";
@@ -190,7 +194,7 @@ namespace BIS.PBO
             }
 
             string recovered = clean.ToString().Replace("..", "");
-            
+
             // Normalize slashes
             recovered = recovered.Replace("/", "\\");
 
@@ -213,7 +217,7 @@ namespace BIS.PBO
             return recovered;
         }
 
-        private byte[] GetFileData(FileEntry entry)
+        protected virtual byte[] GetFileData(FileEntry entry)
         {
             byte[] bytes;
             lock (this)
@@ -224,13 +228,19 @@ namespace BIS.PBO
                     bytes = new byte[entry.DataSize];
                     PBOFileStream.ReadExactly(bytes, 0, entry.DataSize);
                 }
-                else
+                else if (entry.IsCompressed)
                 {
-                    if (!entry.IsCompressed)
-                        throw new Exception("Unexpected packingMethod");
-
                     var br = new BinaryReaderEx(PBOFileStream);
                     bytes = br.ReadLZSS((uint)entry.UncompressedSize);
+                }
+                else if (entry.CompressedMagic == FileEntry.EncryptionMagic)
+                {
+                    bytes = new byte[entry.DataSize];
+                    PBOFileStream.ReadExactly(bytes, 0, entry.DataSize);
+                }
+                else
+                {
+                    throw new Exception($"Unexpected packingMethod: 0x{entry.CompressedMagic:X8}");
                 }
             }
 
@@ -335,18 +345,18 @@ namespace BIS.PBO
             SaveTo(PBOFilePath);
         }
 
-        public void SaveTo(string targetFile)
+        public void SaveTo(string targetFile, bool compress = false)
         {
             if (PBOFilePath == null)
             {
-                SaveToInternal(targetFile, true);
+                SaveToInternal(targetFile, compress, true);
                 PBOFilePath = targetFile;
                 return;
             }
             if (string.Equals(Path.GetFullPath(targetFile), Path.GetFullPath(PBOFilePath), StringComparison.OrdinalIgnoreCase))
             {
                 var temp = Path.GetTempFileName();
-                SaveToInternal(temp, true);
+                SaveToInternal(temp, compress, true);
                 if (pboFileStream != null)
                 {
                     pboFileStream.Close();
@@ -355,19 +365,73 @@ namespace BIS.PBO
                 File.Copy(temp, targetFile, true);
                 return;
             }
-            SaveToInternal(targetFile, false);
+            SaveToInternal(targetFile, compress, false);
         }
 
-        private void SaveToInternal(string targetFile, bool isReplaceSelf)
+        private static byte[] CompressLZSS(byte[] rawData)
         {
-            var entries = Files.Select(e => new FileEntry()
+            // LZSS compression threshold used by PBO format: skip files under 1024 bytes
+            if (rawData.Length < 1024)
+                return rawData;
+
+            using (var ms = new MemoryStream())
             {
-                FileName = e.FileName,
-                TimeStamp = e.TimeStamp,
-                DataSize = e.Size,
-                UncompressedSize = 0,
-                CompressedMagic = 0
-            }).ToList();
+                using (var lzss = new LzssStream(ms, CompressionMode.Compress, true))
+                {
+                    lzss.Write(rawData, 0, rawData.Length);
+                }
+                // Append unsigned byte checksum (matching LZSS.ReadLZSS)
+                var csum = rawData.Sum(b => (int)(uint)b);
+                ms.Write(BitConverter.GetBytes(csum), 0, 4);
+                return ms.ToArray();
+            }
+        }
+
+        private void SaveToInternal(string targetFile, bool compress, bool isReplaceSelf)
+        {
+            var fileData = new List<(byte[] Data, int UncompressedSize)>();
+            var entries = new List<FileEntry>();
+
+            foreach (var file in Files)
+            {
+                byte[] rawData;
+                using (var stream = file.OpenRead())
+                {
+                    using (var ms = new MemoryStream())
+                    {
+                        stream.CopyTo(ms);
+                        rawData = ms.ToArray();
+                    }
+                }
+
+                byte[] storedData;
+                int uncompressedSize;
+                int compressedMagic;
+
+                if (compress && rawData.Length >= 1024)
+                {
+                    storedData = CompressLZSS(rawData);
+                    uncompressedSize = rawData.Length;
+                    compressedMagic = FileEntry.CompressionMagic;
+                }
+                else
+                {
+                    storedData = rawData;
+                    uncompressedSize = 0;
+                    compressedMagic = 0;
+                }
+
+                fileData.Add((storedData, uncompressedSize));
+
+                entries.Add(new FileEntry()
+                {
+                    FileName = file.FileName,
+                    TimeStamp = file.TimeStamp,
+                    DataSize = storedData.Length,
+                    UncompressedSize = uncompressedSize,
+                    CompressedMagic = compressedMagic
+                });
+            }
 
             var offset = 0;
             foreach (var entry in entries)
@@ -376,6 +440,7 @@ namespace BIS.PBO
                 offset += entry.DataSize;
             }
 
+
             using (var target = File.Create(targetFile))
             {
                 using (var output = new BinaryWriterEx(target, true))
@@ -383,13 +448,11 @@ namespace BIS.PBO
                     WriteProperties(output, PropertiesPairs.SelectMany(p => new[] { p.Key, p.Value }));
                     WriteBasicHeader(output, entries);
                 }
-                foreach (var file in Files)
+                foreach (var (data, _) in fileData)
                 {
-                    using (var source = file.OpenRead())
-                    {
-                        source.CopyTo(target);
-                    }
+                    target.Write(data, 0, data.Length);
                 }
+
                 target.Position = 0;
                 byte[] hash;
                 using (var sha1 = SHA1.Create())
@@ -454,7 +517,9 @@ namespace BIS.PBO
         /// Finds the first file entry with the given name (case-insensitive).
         /// Returns null if not found.
         /// </summary>
+#nullable enable
         public IPBOFileEntry? FindFile(string fileName)
+#nullable restore
         {
             var normalized = fileName.Replace('/', '\\');
             for (int i = 0; i < Files.Count; i++)

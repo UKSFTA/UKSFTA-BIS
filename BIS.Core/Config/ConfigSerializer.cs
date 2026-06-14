@@ -1,5 +1,7 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Text;
 using ConfigValueType = BIS.Core.Config.ValueType;
@@ -11,7 +13,6 @@ namespace BIS.Core.Config
         public static string SerializeToConfigText(ParamFile config)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("#version 12");
             foreach (var entry in config.Root.Entries)
                 SerializeEntry(sb, entry, 0);
             return sb.ToString();
@@ -39,8 +40,7 @@ namespace BIS.Core.Config
             {
                 case ParamClass cls:
                     var basePart = string.IsNullOrEmpty(cls.BaseClassName) ? "" : $" : {cls.BaseClassName}";
-                    sb.AppendLine($"{ind}class {cls.Name}{basePart}");
-                    sb.AppendLine($"{ind}{{");
+                    sb.AppendLine($"{ind}class {cls.Name}{basePart} {{");
                     SerializeClassBody(sb, cls, indent + 1);
                     sb.AppendLine($"{ind}}};");
                     break;
@@ -79,11 +79,11 @@ namespace BIS.Core.Config
             if (pv.Value.Type == ConfigValueType.Generic || pv.Value.Type == ConfigValueType.Expression)
                 sb.AppendLine($"{ind}{pv.Name} = \"{EscapeString(pv.Value.Value as string)}\";");
             else if (pv.Value.Type == ConfigValueType.Float)
-                sb.AppendLine($"{ind}{pv.Name} = {pv.Value.Value};");
+                sb.AppendLine($"{ind}{pv.Name} = {((float)pv.Value.Value).ToString(CultureInfo.InvariantCulture)};");
             else if (pv.Value.Type == ConfigValueType.Int)
-                sb.AppendLine($"{ind}{pv.Name} = {pv.Value.Value};");
+                sb.AppendLine($"{ind}{pv.Name} = {((int)pv.Value.Value).ToString(CultureInfo.InvariantCulture)};");
             else if (pv.Value.Type == ConfigValueType.Int64)
-                sb.AppendLine($"{ind}{pv.Name} = {pv.Value.Value};");
+                sb.AppendLine($"{ind}{pv.Name} = {((long)pv.Value.Value).ToString(CultureInfo.InvariantCulture)};");
         }
 
         private static string EscapeString(string? s)
@@ -105,11 +105,11 @@ namespace BIS.Core.Config
                 if (rv.Type == ConfigValueType.Generic || rv.Type == ConfigValueType.Expression)
                     result[i] = $"\"{EscapeString(rv.Value as string)}\"";
                 else if (rv.Type == ConfigValueType.Float)
-                    result[i] = rv.Value?.ToString() ?? "0";
+                    result[i] = (rv.Value as float?)?.ToString(CultureInfo.InvariantCulture) ?? "0";
                 else if (rv.Type == ConfigValueType.Int)
-                    result[i] = rv.Value?.ToString() ?? "0";
+                    result[i] = (rv.Value as int?)?.ToString(CultureInfo.InvariantCulture) ?? "0";
                 else if (rv.Type == ConfigValueType.Int64)
-                    result[i] = rv.Value?.ToString() ?? "0";
+                    result[i] = (rv.Value as long?)?.ToString(CultureInfo.InvariantCulture) ?? "0";
                 else
                     result[i] = rv.Value?.ToString() ?? "null";
             }

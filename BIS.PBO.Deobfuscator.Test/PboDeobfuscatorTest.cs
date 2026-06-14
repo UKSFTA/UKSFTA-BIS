@@ -620,7 +620,6 @@ namespace BIS.PBO.Deobfuscator.Test
             try
             {
                 pbo.SaveTo(tempPath);
-                var loadedPbo = new PBO(tempPath);
 
                 var result = new DeobfuscationResult
                 {
@@ -631,7 +630,10 @@ namespace BIS.PBO.Deobfuscator.Test
                 var outputPath = Path.GetTempFileName();
                 try
                 {
-                    new PboDeobfuscator().Rebuild(loadedPbo, result, outputPath);
+                    using (var loadedPbo = new PBO(tempPath, keepStreamOpen: true))
+                    {
+                        new PboDeobfuscator().Rebuild(loadedPbo, result, outputPath);
+                    }
 
                     using var outputPbo = new PBO(outputPath);
                     // Only prefix and product should be preserved

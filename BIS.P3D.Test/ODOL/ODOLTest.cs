@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using BIS.Core.Streams;
+using BIS.P3D;
 using Xunit;
 
 namespace BIS.P3D.Test.ODOL
@@ -50,6 +51,25 @@ namespace BIS.P3D.Test.ODOL
             Assert.NotNull(odol);
             Assert.Null(odol.Lods);
             Assert.Null(odol.ModelInfo);
+        }
+
+        [Fact]
+        public void Dependencies_FromBarbedwire_ReturnsNonEmpty()
+        {
+            var p3dPath = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory,
+                "..", "..", "..", "..", "..", "_testdata", "p3d", "Barbedwire.p3d");
+            if (!File.Exists(p3dPath))
+                return; // test data not available
+
+            var odol = new BIS.P3D.ODOL.ODOL();
+            using var stream = File.OpenRead(p3dPath);
+            var reader = new BinaryReaderEx(stream);
+            odol.Read(reader);
+
+            var deps = odol.Dependencies();
+            Assert.NotEmpty(deps);
+            Assert.All(deps, d => Assert.False(string.IsNullOrWhiteSpace(d)));
         }
     }
 }

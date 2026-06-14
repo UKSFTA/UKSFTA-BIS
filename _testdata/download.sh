@@ -86,7 +86,7 @@ declare -A FORMATS
 
 register_format() {
     local format="$1"
-    FORMATS["$format"]=$((FORMATS["$format"] + 1))
+    FORMATS["$format"]=$(( ${FORMATS["$format"]-0} + 1))
 }
 
 # Copy files up to a limit to avoid bloating the testdata dir
@@ -102,7 +102,8 @@ copy_files() {
         if [ "$count" -ge "$max_files" ]; then
             break
         fi
-        local basename="$(basename "$file")"
+        local basename
+        basename="$(basename "$file")"
         # Avoid overwriting
         if [ ! -f "$dst_dir/$basename" ]; then
             cp -n "$file" "$dst_dir/$basename"
@@ -174,11 +175,11 @@ PBO_DIR="$SCRIPT_DIR/pbo"
 if ls "$PBO_DIR"/*.pbo 2>/dev/null >/dev/null; then
     # Build the standalone PboExtract tool using the BIS.PBO library directly
     EXTRACTOR_DIR="$SCRIPT_DIR/PboExtract"
-    EXTRACTOR_OUT="/tmp/pbo-extract/PboExtract.dll"
+    EXTRACTOR_OUT="$EXTRACTOR_DIR/bin/Debug/net10.0/PboExtract.dll"
 
     if [ ! -f "$EXTRACTOR_OUT" ]; then
-        echo "  [BUILD] Building PboExtract from library source..."
-        dotnet build "$EXTRACTOR_DIR" --configuration Release -o /tmp/pbo-extract 2>/dev/null
+    echo "  [BUILD] Building PboExtract from library source..."
+    dotnet build "$EXTRACTOR_DIR" --configuration Debug 2>/dev/null || true
     fi
 
     if [ -f "$EXTRACTOR_OUT" ]; then
@@ -198,8 +199,8 @@ if ls "$PBO_DIR"/*.pbo 2>/dev/null >/dev/null; then
             copy_files "$extract_base" "$SCRIPT_DIR/rvmat" "*.rvmat" 5
         done
     else
-        echo "  [WARN] PboExtract build failed — build it manually with:"
-        echo "    dotnet build \"$EXTRACTOR_DIR\" --configuration Release -o /tmp/pbo-extract"
+    echo "  [WARN] PboExtract build failed — build it manually with:"
+    echo "    dotnet build \"$EXTRACTOR_DIR\" --configuration Debug"
         echo "  Individual format files (PAA, P3D, config.bin) won't be extracted."
     fi
 else
@@ -216,7 +217,7 @@ for fmt in "${!FORMATS[@]}"; do
 done
 echo ""
 echo "Arma 3 Samples (symlink to use):"
-echo "  ln -sf \"/ext/SteamLibrary/steamapps/common/Arma 3 Samples\" \"$SCRIPT_DIR/sources/arma3-samples\""
+echo "  ln -sf \"/path/to/Steam/steamapps/common/Arma 3 Samples\" \"$SCRIPT_DIR/sources/arma3-samples\""
 echo ""
 echo "Arma Reforger Samples (source only — no compiled PAK files):"
 echo "  git clone https://github.com/BohemiaInteractive/Arma-Reforger-Samples.git sources/reforger-samples"

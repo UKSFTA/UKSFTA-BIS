@@ -210,11 +210,11 @@ if (Test-Path $PboDir) {
     if ($pboFiles.Count -gt 0) {
         # Build PboExtract from library source (no dependency on Utils tooling)
         $extractorDir = Join-Path $ScriptDir "PboExtract"
-        $extractorOut = "C:\temp\pbo-extract\PboExtract.dll"
+        $extractorOut = Join-Path $extractorDir "bin\Debug\net10.0\PboExtract.dll"
 
         if (-not (Test-Path $extractorOut)) {
             Write-Host "  [BUILD] Building PboExtract from library source..."
-            & dotnet build $extractorDir --configuration Release -o C:\temp\pbo-extract 2>$null
+            & dotnet build $extractorDir --configuration Debug 2>$null
         }
 
         if (Test-Path $extractorOut) {
@@ -240,8 +240,8 @@ if (Test-Path $PboDir) {
                 Copy-Files -SrcDir $extractDir -DstDir (Join-Path $ScriptDir "rvmat") -Pattern "*.rvmat" -MaxFiles 5
             }
         } else {
-            Write-Host "  [WARN] PboExtract build failed — build it manually with:"
-            Write-Host "    dotnet build `"$extractorDir`" --configuration Release -o C:\temp\pbo-extract"
+        Write-Host "  [WARN] PboExtract build failed — build it manually with:"
+        Write-Host "    dotnet build `"$extractorDir`" --configuration Debug"
             Write-Host "  Individual format files (PAA, P3D, config.bin) won't be extracted."
         }
     } else {

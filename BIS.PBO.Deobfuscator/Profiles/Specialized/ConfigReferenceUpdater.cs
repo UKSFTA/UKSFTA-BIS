@@ -10,7 +10,7 @@ namespace BIS.PBO.Deobfuscator
 {
     public class ConfigReferenceUpdater : IReferenceUpdater
     {
-        public byte[] UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
+        public byte[]? UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
         {
             if (!string.Equals(fileEntry.FileName, "config.bin", StringComparison.OrdinalIgnoreCase))
                 return null;

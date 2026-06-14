@@ -109,7 +109,7 @@ namespace BIS.PBO.Deobfuscator.Profiles
                     continue;
                 }
 
-                scanContent:
+            scanContent:
                 // Scan small files for decoy content patterns
                 if (file.Size < 65536)
                 {

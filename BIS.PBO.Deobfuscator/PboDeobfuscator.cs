@@ -227,15 +227,15 @@ namespace BIS.PBO.Deobfuscator
                         else
                         {
                             // Forced fallback: numbered placeholder
-                        dirCounters.TryGetValue(dir, out var counter);
-                        counter++;
-                        dirCounters[dir] = counter;
-                        var dirPrefix = dir.Split('/').LastOrDefault() ?? "file";
-                        if (dirPrefix == "_unknown")
-                            dirPrefix = "file";
-                        var baseName = $"{dirPrefix}_{counter:D3}";
-                        finalName = $"{dir}/{baseName}{ext}";
-                    }
+                            dirCounters.TryGetValue(dir, out var counter);
+                            counter++;
+                            dirCounters[dir] = counter;
+                            var dirPrefix = dir.Split('/').LastOrDefault() ?? "file";
+                            if (dirPrefix == "_unknown")
+                                dirPrefix = "file";
+                            var baseName = $"{dirPrefix}_{counter:D3}";
+                            finalName = $"{dir}/{baseName}{ext}";
+                        }
                     }
                 }
 
@@ -322,8 +322,8 @@ namespace BIS.PBO.Deobfuscator
                     if (modifiedData.TryGetValue(idx, out var data))
                         target.Write(data, 0, data.Length);
                     else
-                    using (var source = pbo.Files[idx].OpenRead())
-                        source.CopyTo(target);
+                        using (var source = pbo.Files[idx].OpenRead())
+                            source.CopyTo(target);
                 }
                 target.Position = 0;
                 using (var sha1 = SHA1.Create())
@@ -492,7 +492,7 @@ namespace BIS.PBO.Deobfuscator
 
         /// Detects a common mod prefix from class names (e.g., "jsoar_", "uksf_").
         /// Class-name frequency analysis (>70%), with fallback from PBO prefix property.
-        internal static string? DetectModPrefix(List<string> classNames, string? pboPrefix)
+        internal static string? DetectModPrefix(List<string>? classNames, string? pboPrefix)
         {
             if (classNames == null || classNames.Count == 0) return null;
 

@@ -56,7 +56,7 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             }
             if (p3dScanned > 0)
                 Console.WriteLine($"  -> Scanned {p3dScanned} P3D files, extracted {p3dPaths} unique paths.");
-            
+
             return result;
         }
     }

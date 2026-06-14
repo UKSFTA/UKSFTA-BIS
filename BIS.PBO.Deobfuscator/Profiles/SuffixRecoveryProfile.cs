@@ -13,8 +13,8 @@ using P3DModel = BIS.P3D.P3D;
 
 namespace BIS.PBO.Deobfuscator.Profiles
 {
-public class SuffixRecoveryProfile : IObfuscationProfile
-{
+    public class SuffixRecoveryProfile : IObfuscationProfile
+    {
         private static readonly string[] RealExtensions = new[]
         {
             ".paa", ".p3d", ".rvmat", ".dll", ".so"
@@ -24,22 +24,22 @@ public class SuffixRecoveryProfile : IObfuscationProfile
             @"^[A-Za-z0-9]{2,12}$",
             RegexOptions.Compiled
         );
-    /// <summary>
-    /// Handles PBOs whose filenames have been stripped to suffix-only patterns.
-    ///
-    /// These PBOs have file entries where the base name has been truncated, leaving
-    /// only the suffix and extension (e.g. "data\abav\_as.paa" instead of
-    /// "data\abav\avs_assault_as.paa") or just an extension with no base name
-    /// (e.g. "acex\.paa"). The folder structure and extension are preserved.
-    ///
-    /// Detection uses structural heuristics:
-    ///   - File entries whose names consist only of _suffix.ext or .ext
-    ///   - Presence of a config.bin for cross-reference recovery
-    ///
-    /// Recovery strategy: scan the binarized config.bin for ASCII path strings that
-    /// reference the original full file paths. Cross-reference by folder + suffix
-    /// to rebuild names where possible.
-    /// </summary>
+        /// <summary>
+        /// Handles PBOs whose filenames have been stripped to suffix-only patterns.
+        ///
+        /// These PBOs have file entries where the base name has been truncated, leaving
+        /// only the suffix and extension (e.g. "data\abav\_as.paa" instead of
+        /// "data\abav\avs_assault_as.paa") or just an extension with no base name
+        /// (e.g. "acex\.paa"). The folder structure and extension are preserved.
+        ///
+        /// Detection uses structural heuristics:
+        ///   - File entries whose names consist only of _suffix.ext or .ext
+        ///   - Presence of a config.bin for cross-reference recovery
+        ///
+        /// Recovery strategy: scan the binarized config.bin for ASCII path strings that
+        /// reference the original full file paths. Cross-reference by folder + suffix
+        /// to rebuild names where possible.
+        /// </summary>
         public string ProfileName => "Suffix-based Recovery";
 
         // PBO paths use \ as separator; normalize to / for cross-platform Path methods

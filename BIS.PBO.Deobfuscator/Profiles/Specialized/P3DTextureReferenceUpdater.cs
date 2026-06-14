@@ -12,7 +12,7 @@ namespace BIS.PBO.Deobfuscator
 {
     public class P3DTextureReferenceUpdater : IReferenceUpdater
     {
-        public byte[] UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
+        public byte[]? UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
         {
             var ext = Path.GetExtension(fileEntry.FileName);
             if (!string.Equals(ext, ".p3d", StringComparison.OrdinalIgnoreCase))

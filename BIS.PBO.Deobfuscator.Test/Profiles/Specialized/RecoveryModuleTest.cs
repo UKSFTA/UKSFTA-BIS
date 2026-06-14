@@ -219,7 +219,7 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
 
             new SuffixBasedFilenameRecoveryModule().Recover(pbo, result, knownPaths, "");
 
-            Assert.Equal(1, result.RecoveredNames.Count); // only one can be recovered
+            Assert.Single(result.RecoveredNames); // only one can be recovered
         }
 
         // ─── P3DPathRecoveryModule ───

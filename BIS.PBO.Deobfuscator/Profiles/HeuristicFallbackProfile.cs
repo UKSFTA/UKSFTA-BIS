@@ -37,7 +37,8 @@ namespace BIS.PBO.Deobfuscator.Profiles
             if (totalFiles > 10 && (double)smallFiles / totalFiles > 0.6) return true;
 
             // Heuristic 2: Unusual file name patterns (high number of files starting with non-standard chars)
-            int unusualNames = pbo.Files.Count(f => {
+            int unusualNames = pbo.Files.Count(f =>
+            {
                 var name = System.IO.Path.GetFileName(f.FileName);
                 return name.StartsWith("_") || name.StartsWith(".");
             });

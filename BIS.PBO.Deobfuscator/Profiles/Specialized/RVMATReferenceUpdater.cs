@@ -11,7 +11,7 @@ namespace BIS.PBO.Deobfuscator
 {
     public class RVMATReferenceUpdater : IReferenceUpdater
     {
-        public byte[] UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
+        public byte[]? UpdateReferences(IPBOFileEntry fileEntry, Dictionary<string, string> pathMap)
         {
             var ext = Path.GetExtension(fileEntry.FileName);
             if (!string.Equals(ext, ".rvmat", StringComparison.OrdinalIgnoreCase))

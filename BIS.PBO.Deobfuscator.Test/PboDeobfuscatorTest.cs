@@ -25,7 +25,7 @@ namespace BIS.PBO.Deobfuscator.Test
 
         // ─── PBO roundtrip helper (save+load so Prefix is parsed from header) ───
 
-        private static PBO CreateLoadedPbo(string prefix, params (string name, byte[] data)[] files)
+        private static PBO CreateLoadedPbo(string? prefix, params (string name, byte[] data)[] files)
         {
             var pbo = new PBO();
             if (prefix != null)
@@ -68,7 +68,7 @@ namespace BIS.PBO.Deobfuscator.Test
 
         private static byte[] CreateConfigWithPaths(
             (string className, string[] paths)[] classDefs,
-            (string name, string value)[] values = null)
+            (string name, string value)[]? values = null)
         {
             var entries = new List<ParamEntry>();
             foreach (var (className, paths) in classDefs)
@@ -146,7 +146,7 @@ namespace BIS.PBO.Deobfuscator.Test
                 new PboDeobfuscator().Rebuild(pbo, result, outputPath);
 
                 using var outputPbo = new PBO(outputPath);
-                Assert.Equal(1, outputPbo.Files.Count);
+                Assert.Single(outputPbo.Files);
                 Assert.Equal("data\\tex\\real_co.paa", outputPbo.Files[0].FileName);
             }
             finally
@@ -174,7 +174,7 @@ namespace BIS.PBO.Deobfuscator.Test
                 new PboDeobfuscator().Rebuild(pbo, result, outputPath);
 
                 using var outputPbo = new PBO(outputPath);
-                Assert.Equal(1, outputPbo.Files.Count);
+                Assert.Single(outputPbo.Files);
                 Assert.Equal("data\\tex\\valid_co.paa", outputPbo.Files[0].FileName);
             }
             finally
@@ -869,91 +869,130 @@ namespace BIS.PBO.Deobfuscator.Test
         }
 
         // ════════════════════════════════════════════════════════════════
-        //  Integration tests with real PBO files
+        //  Integration tests with synthetic PBO files
+        //  (generated in-memory — no external test data dependencies)
         // ════════════════════════════════════════════════════════════════
 
-        private static string GetTestDataPath(string fileName)
-        {
-            var assemblyDir = AppContext.BaseDirectory;
-            return Path.GetFullPath(Path.Combine(assemblyDir,
-                "../../../../_testdata_untracked", fileName));
-        }
-
-        private static readonly string[] RealPboFiles = { "JSOAR.pbo", "TFG_Vests.pbo", "uksf_tfa_vests.pbo", "UKSF_KS.pbo" };
-
         [Fact]
-        public void Process_RealPbo_JSOAR_RunsWithoutException()
+        public void Process_SyntheticPbo_SuffixBasedRecovery_Matches()
         {
-            var path = GetTestDataPath("JSOAR.pbo");
-            Assert.True(File.Exists(path), $"Test data not found: {path}");
-            using var pbo = new PBO(path);
+            var pbo = CreateLoadedPbo("testmod",
+                ("config.bin", CreateConfigWithPaths(new[] { ("SomeClass", new[] { "data\\tex\\tex.paa" }) })),
+                ("_unknown\\_file.paa", PaaHeader),
+                ("_unknown\\_co.paa", PaaHeader),
+                ("data\\tex\\clean.paa", PaaHeader)
+            );
             var result = new PboDeobfuscator().Process(pbo);
             Assert.NotNull(result);
-            Assert.NotNull(result.MatchedProfile);
+            Assert.Equal("Suffix-based Recovery", result.MatchedProfile);
             Assert.True(result.Stats.Count > 0);
         }
 
         [Fact]
-        public void Process_RealPbo_TFG_Vests_RunsWithoutException()
+        public void Process_SyntheticPbo_DecoyInjectionProfile_Matches()
         {
-            var path = GetTestDataPath("TFG_Vests.pbo");
-            Assert.True(File.Exists(path), $"Test data not found: {path}");
-            using var pbo = new PBO(path);
+            var pbo = new PBO();
+            pbo.PropertiesPairs.Add(new KeyValuePair<string, string>(
+                "very_long_property_key_that_exceeds_forty_characters", "val"));
+            pbo.PropertiesPairs.Add(new KeyValuePair<string, string>(
+                "k", "very_long_property_value_that_exceeds_forty_characters_and_then_some"));
+            pbo.AddFile("data\\tex\\real.paa", PaaHeader);
+            pbo.AddFile("data\\tex\\decoy.bin", Array.Empty<byte>());
+
+            var tempPath = Path.GetTempFileName();
+            try
+            {
+                pbo.SaveTo(tempPath);
+                using var loadedPbo = new PBO(tempPath);
+                var result = new PboDeobfuscator().Process(loadedPbo);
+                Assert.NotNull(result);
+                Assert.Equal("Decoy Injection", result.MatchedProfile);
+                Assert.True(result.Stats.Count > 0);
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
+        }
+
+        [Fact]
+        public void Process_SyntheticCleanPbo_NoMatch()
+        {
+            var pbo = CreateLoadedPbo("testmod",
+                ("config.bin", new byte[] { 0x00, 0x72, 0x61, 0x53 }),
+                ("data\\tex\\tex.paa", PaaHeader),
+                ("data\\model.p3d", P3dHeader)
+            );
+            var result = new PboDeobfuscator().Process(pbo);
+            Assert.NotNull(result);
+            Assert.Null(result.MatchedProfile);
+        }
+
+        [Fact]
+        public void Process_SyntheticPbo_HeuristicFallback_Matches()
+        {
+            var pbo = new PBO();
+            pbo.PropertiesPairs.Add(new KeyValuePair<string, string>("prefix", "testmod"));
+            for (int i = 0; i < 8; i++)
+                pbo.AddFile($"data\\small\\file{i}.paa", new byte[] { 0x00, 0x72 });
+            for (int i = 0; i < 5; i++)
+                pbo.AddFile($"data\\large\\file{i}.paa", new byte[1024]);
+
+            var tempPath = Path.GetTempFileName();
+            try
+            {
+                pbo.SaveTo(tempPath);
+                using var loadedPbo = new PBO(tempPath);
+                var result = new PboDeobfuscator().Process(loadedPbo);
+                Assert.NotNull(result);
+                Assert.NotNull(result.MatchedProfile);
+                Assert.True(result.Stats.Count > 0);
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
+        }
+
+        [Fact]
+        public void Process_SyntheticPbo_HeuristicFallback_SuffixProfilePreferred()
+        {
+            var pbo = CreateLoadedPbo(null,
+                ("_unknown\\_file.paa", PaaHeader),
+                ("_unknown\\_other.paa", PaaHeader)
+            );
             var result = new PboDeobfuscator().Process(pbo);
             Assert.NotNull(result);
             Assert.NotNull(result.MatchedProfile);
-            Assert.True(result.Stats.Count > 0);
+            Assert.Contains("Suffix-based Recovery", result.MatchedProfile);
         }
 
         [Fact]
-        public void Process_RealPbo_uksf_tfa_vests_RunsWithoutException()
+        public void Rebuild_SyntheticPbo_ProducesValidOutput()
         {
-            var path = GetTestDataPath("uksf_tfa_vests.pbo");
-            Assert.True(File.Exists(path), $"Test data not found: {path}");
-            using var pbo = new PBO(path);
-            var result = new PboDeobfuscator().Process(pbo);
+            var configBin = CreateConfigWithImagePaths(
+                ("MyWeapon", "_unknown\\_weapon_tex.paa")
+            );
+            var pbo = CreateLoadedPbo("testmod",
+                ("config.bin", configBin),
+                ("_unknown\\_weapon.p3d", P3dHeader),
+                ("_unknown\\_weapon_tex.paa", PaaHeader)
+            );
+            var deobfuscator = new PboDeobfuscator();
+            var result = deobfuscator.Process(pbo);
+
             Assert.NotNull(result);
-            // Some PBOs may not match any profile (clean PBOs) — that's okay
-            Assert.True(result.MatchedProfile == null || result.Stats.Count > 0);
-        }
-
-        [Fact]
-        public void Process_RealPbo_UKSF_KS_RunsWithoutException()
-        {
-            var path = GetTestDataPath("UKSF_KS.pbo");
-            Assert.True(File.Exists(path), $"Test data not found: {path}");
-            using var pbo = new PBO(path);
-            var result = new PboDeobfuscator().Process(pbo);
-            Assert.NotNull(result);
-            Assert.NotNull(result.MatchedProfile);
-            Assert.True(result.Stats.Count > 0);
-        }
-
-        [Fact]
-        public void Rebuild_RealPbo_ProducesValidOutput()
-        {
-            // Use the smallest PBO for rebuild test
-            var pboPath = GetTestDataPath("UKSF_KS.pbo");
-            Assert.True(File.Exists(pboPath), $"Test data not found: {pboPath}");
-
-            using var pbo = new PBO(pboPath);
-            var result = new PboDeobfuscator().Process(pbo);
             Assert.NotNull(result.MatchedProfile);
 
             var rebuildPath = Path.GetTempFileName();
-            long fileSize;
             try
             {
-                new PboDeobfuscator().Rebuild(pbo, result, rebuildPath);
+                deobfuscator.Rebuild(pbo, result, rebuildPath);
                 Assert.True(File.Exists(rebuildPath));
+                Assert.True(new FileInfo(rebuildPath).Length > 0);
 
-                fileSize = new FileInfo(rebuildPath).Length;
-                Assert.True(fileSize > 0);
-
-                // Verify output PBO is valid by loading it
                 using var outputPbo = new PBO(rebuildPath);
                 Assert.True(outputPbo.Files.Count > 0);
-                // All output names should be ASCII (no Cyrillic)
                 Assert.All(outputPbo.Files, f =>
                     Assert.True(f.FileName.All(c => c < 128),
                         $"Non-ASCII character in output filename: {f.FileName}"));
@@ -965,19 +1004,40 @@ namespace BIS.PBO.Deobfuscator.Test
         }
 
         [Fact]
-        public void Process_AllRealPbos_ProduceDifferentMatchedProfiles()
+        public void Process_MultipleSyntheticPbos_ProduceDifferentProfiles()
         {
             var profiles = new HashSet<string>();
-            foreach (var pboName in RealPboFiles)
+
+            var pbo1 = CreateLoadedPbo("mod1",
+                (".paa", PaaHeader),
+                ("_co.paa", PaaHeader)
+            );
+            var r1 = new PboDeobfuscator().Process(pbo1);
+            if (r1.MatchedProfile != null)
+                profiles.Add(r1.MatchedProfile);
+
+            var pbo2 = new PBO();
+            pbo2.PropertiesPairs.Add(new KeyValuePair<string, string>(
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "v"));
+            pbo2.PropertiesPairs.Add(new KeyValuePair<string, string>(
+                "k", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+            pbo2.AddFile("_unknown\\_file.paa", PaaHeader);
+            pbo2.AddFile("_unknown\\_decoy.bin", Array.Empty<byte>());
+            var p2Path = Path.GetTempFileName();
+            try
             {
-                var path = GetTestDataPath(pboName);
-                if (!File.Exists(path)) continue;
-                using var pbo = new PBO(path);
-                var result = new PboDeobfuscator().Process(pbo);
-                if (result.MatchedProfile != null)
-                    profiles.Add(result.MatchedProfile);
+                pbo2.SaveTo(p2Path);
+                using var loadedPbo2 = new PBO(p2Path);
+                var r2 = new PboDeobfuscator().Process(loadedPbo2);
+                if (r2.MatchedProfile != null)
+                    profiles.Add(r2.MatchedProfile);
             }
-            Assert.True(profiles.Count > 0, "No real PBO files found for testing");
+            finally
+            {
+                if (File.Exists(p2Path)) File.Delete(p2Path);
+            }
+
+            Assert.True(profiles.Count > 0, "No synthetic PBO matched any profile");
         }
     }
 }

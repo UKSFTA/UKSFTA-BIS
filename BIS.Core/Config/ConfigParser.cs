@@ -22,6 +22,12 @@ namespace BIS.Core.Config
         }
 
         /// <summary>
+        /// Preprocessor diagnostics collected during the last call to ParseFile.
+        /// Null if Parse was used directly without preprocessing.
+        /// </summary>
+        public IReadOnlyList<PreprocessorDiagnostic>? PreprocessorDiagnostics { get; private set; }
+
+        /// <summary>
         /// Parse a list of preprocessed config tokens into a ParamFile.
         /// </summary>
         public ParamFile Parse(IEnumerable<ConfigToken> tokens)
@@ -36,15 +42,16 @@ namespace BIS.Core.Config
         }
 
         /// <summary>
-        /// Convenience: preprocess and parse a config.cpp file.
+        /// Preprocess and parse a config.cpp file, collecting preprocessor diagnostics
+        /// that can be accessed via PreprocessorDiagnostics.
         /// </summary>
-        public static ParamFile ParseFile(string sourcePath, IIncludeResolver? resolver = null)
+        public ParamFile ParseFile(string sourcePath, IIncludeResolver? resolver = null)
         {
             resolver ??= new DefaultIncludeResolver(Enumerable.Empty<string>());
             var preprocessor = new ConfigPreprocessor(resolver);
             var tokens = preprocessor.Preprocess(sourcePath);
-            var parser = new ConfigParser();
-            return parser.Parse(tokens);
+            PreprocessorDiagnostics = preprocessor.Diagnostics;
+            return Parse(tokens);
         }
 
         // ── Parser Methods ──
@@ -105,6 +112,7 @@ namespace BIS.Core.Config
         private ParamEntry ParseClass()
         {
             // "class" Identifier [":" Identifier] (";" | "{" Entries "}" ";")
+            var classToken = Peek();
             Advance(); // consume "class"
 
             // Expect class name
@@ -114,10 +122,11 @@ namespace BIS.Core.Config
             if (Peek().Type == ConfigTokenType.Semicolon)
             {
                 Advance();
-                return new ParamExternClass(nameToken.Value);
+                return new ParamExternClass(nameToken.Value) { Line = nameToken.Line, File = nameToken.File };
             }
 
             string baseClass = "";
+            int baseLine = nameToken.Line;
 
             // Optional base class
             if (Peek().Type == ConfigTokenType.Colon)
@@ -137,7 +146,10 @@ namespace BIS.Core.Config
             if (Peek().Type == ConfigTokenType.Semicolon)
                 Advance();
 
-            return new ParamClass(nameToken.Value, baseClass, entries);
+            var cls = new ParamClass(nameToken.Value, baseClass, entries);
+            cls.Line = baseLine;
+            cls.File = nameToken.File;
+            return cls;
         }
 
         private ParamDeleteClass ParseDeleteClass()
@@ -146,7 +158,7 @@ namespace BIS.Core.Config
             Advance(); // consume "delete"
             var nameToken = Consume(ConfigTokenType.Identifier, "Expected class name after 'delete'");
             Consume(ConfigTokenType.Semicolon, "Expected ';' after delete statement");
-            return new ParamDeleteClass(nameToken.Value);
+            return new ParamDeleteClass(nameToken.Value) { Line = nameToken.Line, File = nameToken.File };
         }
 
         private ParamEntry? ParseAssignmentOrProperty()
@@ -177,7 +189,7 @@ namespace BIS.Core.Config
                 Consume(ConfigTokenType.CloseBrace, "Expected '}'");
                 if (Peek().Type == ConfigTokenType.Semicolon)
                     Advance();
-                return new ParamClass(nameToken.Value, baseToken.Value, entries);
+                return new ParamClass(nameToken.Value, baseToken.Value, entries) { Line = nameToken.Line, File = nameToken.File };
             }
 
             // Check for array: Identifier "[" "]"
@@ -204,9 +216,9 @@ namespace BIS.Core.Config
 
                 if (plusAssign)
                 {
-                    return new ParamArraySpec(nameToken.Value, 1, values);
+                    return new ParamArraySpec(nameToken.Value, 1, values) { Line = nameToken.Line, File = nameToken.File };
                 }
-                return new ParamArray(nameToken.Value, values);
+                return new ParamArray(nameToken.Value, values) { Line = nameToken.Line, File = nameToken.File };
             }
 
             // Regular assignment: Identifier "=" value ";"
@@ -215,7 +227,7 @@ namespace BIS.Core.Config
                 Advance(); // consume "="
                 var value = ParseValue();
                 Consume(ConfigTokenType.Semicolon, "Expected ';' after value assignment");
-                return new ParamValue(nameToken.Value, value);
+                return new ParamValue(nameToken.Value, value) { Line = nameToken.Line, File = nameToken.File };
             }
 
             // If followed by '{', treat as inline class without 'class' keyword
@@ -226,7 +238,7 @@ namespace BIS.Core.Config
                 Consume(ConfigTokenType.CloseBrace, "Expected '}'");
                 if (Peek().Type == ConfigTokenType.Semicolon)
                     Advance();
-                return new ParamClass(nameToken.Value, entries);
+                return new ParamClass(nameToken.Value, entries) { Line = nameToken.Line, File = nameToken.File };
             }
 
             // Unknown construct — skip to next semicolon or brace

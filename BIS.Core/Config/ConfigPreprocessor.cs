@@ -58,28 +58,61 @@ namespace BIS.Core.Config
     }
 
     /// <summary>
+    /// A single preprocessor diagnostic (warning or error).
+    /// </summary>
+    public readonly struct PreprocessorDiagnostic
+    {
+        public string Code { get; }
+        public string Message { get; }
+        public string File { get; }
+        public int Line { get; }
+
+        public PreprocessorDiagnostic(string code, string message, string file = "", int line = 0)
+        {
+            Code = code;
+            Message = message;
+            File = file;
+            Line = line;
+        }
+
+        public override string ToString()
+        {
+            var loc = !string.IsNullOrEmpty(File) ? $"{File}({Line})" : "(unknown)";
+            return $"[{Code}] Warning: {Message} at {loc}";
+        }
+    }
+
+    /// <summary>
     /// Config preprocessor that resolves includes, defines, and conditionals.
     /// </summary>
     public class ConfigPreprocessor
     {
         private readonly IIncludeResolver _resolver;
         private readonly Dictionary<string, string?> _defines;
+        // Track where each macro was first defined (file, line) for PW1
+        private readonly Dictionary<string, (string File, int Line)> _defineOrigins;
         private readonly Stack<string> _includeStack;
         private readonly HashSet<string> _includedFiles; // guard against circular includes
+        private readonly List<PreprocessorDiagnostic> _diagnostics;
 
         public ConfigPreprocessor(IIncludeResolver resolver)
         {
             _resolver = resolver;
             _defines = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            _defineOrigins = new Dictionary<string, (string, int)>(StringComparer.OrdinalIgnoreCase);
             _includeStack = new Stack<string>();
             _includedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            _diagnostics = new List<PreprocessorDiagnostic>();
         }
 
         public ConfigPreprocessor(IIncludeResolver resolver, Dictionary<string, string?> defines)
             : this(resolver)
         {
             foreach (var kvp in defines)
+            {
                 _defines[kvp.Key] = kvp.Value;
+                _defineOrigins[kvp.Key] = ("<built-in>", 0);
+            }
         }
 
         /// <summary>
@@ -87,12 +120,18 @@ namespace BIS.Core.Config
         /// </summary>
         public List<ConfigToken> Preprocess(string sourcePath)
         {
+            _diagnostics.Clear();
             _includedFiles.Clear();
             _includeStack.Clear();
             var allTokens = new List<ConfigToken>();
             PreprocessFile(sourcePath, allTokens);
             return allTokens;
         }
+
+        /// <summary>
+        /// Diagnostics collected during preprocessing.
+        /// </summary>
+        public IReadOnlyList<PreprocessorDiagnostic> Diagnostics => _diagnostics;
 
         private void PreprocessFile(string filePath, List<ConfigToken> output)
         {
@@ -130,19 +169,24 @@ namespace BIS.Core.Config
             _includeStack.Pop();
         }
 
+        // Known preprocessor directive keywords (without #, which is stripped by the tokenizer)
+        private static readonly HashSet<string> DirectiveKeywords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "define", "undef", "include", "ifdef", "ifndef", "if", "else", "elif", "endif", "error", "pragma"
+        };
+
         private void ProcessTokens(List<ConfigToken> tokens, List<ConfigToken> output)
         {
             var conditionalStack = new Stack<ConditionalState>();
-            // default: emitting
             conditionalStack.Push(ConditionalState.Emit);
 
             for (int i = 0; i < tokens.Count; i++)
             {
                 var token = tokens[i];
 
-                // Check if we're at a preprocessor directive (# at start of logical line)
+                // Detect preprocessor directives by keyword (the tokenizer strips #, so #define becomes "define")
                 if (token.Type == ConfigTokenType.Identifier &&
-                    token.Value.Length > 0 && token.Value[0] == '#')
+                    DirectiveKeywords.Contains(token.Value))
                 {
                     i = HandleDirective(token, tokens, i, conditionalStack, output);
                     continue;
@@ -151,12 +195,15 @@ namespace BIS.Core.Config
                 // Emit or skip based on current conditional state
                 if (conditionalStack.Peek() == ConditionalState.Emit)
                 {
+                    // Skip newlines in the output stream
+                    if (token.Type == ConfigTokenType.Newline)
+                        continue;
+
                     // Try macro expansion for identifiers
                     if (token.Type == ConfigTokenType.Identifier && _defines.TryGetValue(token.Value, out var macroValue))
                     {
                         if (macroValue != null)
                         {
-                            // Expand macro value as tokens
                             var expandedTokens = ConfigTokenizer.Tokenize(macroValue, token.File);
                             foreach (var et in expandedTokens)
                             {
@@ -164,7 +211,6 @@ namespace BIS.Core.Config
                                     output.Add(et);
                             }
                         }
-                        // macro with no value → expand to nothing
                     }
                     else
                     {
@@ -182,45 +228,44 @@ namespace BIS.Core.Config
         }
 
         private int HandleDirective(
-            ConfigToken hashToken, List<ConfigToken> tokens, int idx,
+            ConfigToken directiveToken, List<ConfigToken> tokens, int idx,
             Stack<ConditionalState> conditionalStack, List<ConfigToken> output)
         {
-            // hashToken is the #identifier token - the directive name follows (or it's just "#" as identifier)
-            var directive = hashToken.Value;
+            var directive = directiveToken.Value;
 
             switch (directive.ToLowerInvariant())
             {
-                case "#include":
+                case "include":
                     return HandleInclude(tokens, idx, output);
 
-                case "#define":
+                case "define":
                     return HandleDefine(tokens, idx);
 
-                case "#undef":
+                case "undef":
                     return HandleUndef(tokens, idx);
 
-                case "#ifdef":
+                case "ifdef":
                     return HandleIfdef(tokens, idx, conditionalStack, false);
 
-                case "#ifndef":
+                case "ifndef":
                     return HandleIfdef(tokens, idx, conditionalStack, true);
 
-                case "#if":
+                case "if":
                     return HandleIf(tokens, idx, conditionalStack);
 
-                case "#else":
+                case "else":
                     return HandleElse(tokens, idx, conditionalStack);
 
-                case "#elif":
+                case "elif":
                     return HandleElif(tokens, idx, conditionalStack);
 
-                case "#endif":
+                case "endif":
                     return HandleEndif(tokens, idx, conditionalStack);
 
-                case "#error":
+                case "error":
                     return HandleError(tokens, idx);
 
-                case "#pragma":
+                case "pragma":
                     return SkipLine(tokens, idx); // ignore pragma
 
                 default:
@@ -246,7 +291,12 @@ namespace BIS.Core.Config
                 if (resolved != null)
                     PreprocessFile(resolved, output);
                 else
+                {
                     Console.Error.WriteLine($"ConfigPreprocessor: Include not found: \"{pathToken.Value}\" ({_includeStack.Peek()})");
+                    _diagnostics.Add(new PreprocessorDiagnostic(
+                        "PW2", $"Include not found: \"{pathToken.Value}\"",
+                        pathToken.File, pathToken.Line));
+                }
                 return SkipLine(tokens, idx);
             }
 
@@ -259,7 +309,12 @@ namespace BIS.Core.Config
                 if (resolved != null)
                     PreprocessFile(resolved, output);
                 else
+                {
                     Console.Error.WriteLine($"ConfigPreprocessor: Include not found: <{incPath}> ({_includeStack.Peek()})");
+                    _diagnostics.Add(new PreprocessorDiagnostic(
+                        "PW2", $"Include not found: <{incPath}>",
+                        pathToken.File, pathToken.Line));
+                }
                 return SkipLine(tokens, idx);
             }
 
@@ -272,7 +327,6 @@ namespace BIS.Core.Config
         {
             int i = idx + 1;
 
-            // Skip whitespace tokens (there shouldn't be any in tokenized output)
             while (i < tokens.Count && tokens[i].Type == ConfigTokenType.Semicolon)
                 i++;
 
@@ -280,22 +334,41 @@ namespace BIS.Core.Config
                 return SkipLine(tokens, idx);
 
             var macroName = tokens[i].Value;
+            var nameToken = tokens[i];
             i++;
 
-            // Check if there's a value (anything before next newline/Eof/another directive)
             var valueParts = new List<string>();
             while (i < tokens.Count && tokens[i].Type != ConfigTokenType.Eof)
             {
                 var t = tokens[i];
-                if (t.Type == ConfigTokenType.Identifier && t.Value.Length > 0 && t.Value[0] == '#')
-                    break; // next directive
+                if (t.Type == ConfigTokenType.Identifier && DirectiveKeywords.Contains(t.Value))
+                    break;
                 if (t.Type == ConfigTokenType.Semicolon)
-                    break; // end of line marker
+                    break;
+                if (t.Type == ConfigTokenType.Newline)
+                    break;
                 valueParts.Add(t.Value);
                 i++;
             }
 
             var macroValue = valueParts.Count > 0 ? string.Join("", valueParts) : null;
+
+            // PW1: RedefineMacro — warn when a macro is redefined with a different value
+            if (_defines.TryGetValue(macroName, out var existingValue))
+            {
+                if (existingValue != macroValue)
+                {
+                    _diagnostics.Add(new PreprocessorDiagnostic(
+                        "PW1",
+                        $"Redefine macro '{macroName}': was '{existingValue ?? ""}', now '{macroValue ?? ""}'",
+                        nameToken.File, nameToken.Line));
+                }
+            }
+            else
+            {
+                _defineOrigins[macroName] = (nameToken.File, nameToken.Line);
+            }
+
             _defines[macroName] = macroValue;
             return i - 1;
         }
@@ -308,7 +381,22 @@ namespace BIS.Core.Config
                 i++;
 
             if (i < tokens.Count && tokens[i].Type == ConfigTokenType.Identifier)
-                _defines.Remove(tokens[i].Value);
+            {
+                var nameToken = tokens[i];
+
+                // PW5: UndefNotDefined — warn when undef'ing a macro that was never defined
+                if (!_defines.ContainsKey(nameToken.Value))
+                {
+                    _diagnostics.Add(new PreprocessorDiagnostic(
+                        "PW5",
+                        $"Undef not defined: '{nameToken.Value}' was never defined",
+                        nameToken.File, nameToken.Line));
+                }
+                else
+                {
+                    _defines.Remove(nameToken.Value);
+                }
+            }
 
             return SkipLine(tokens, idx);
         }
@@ -351,7 +439,7 @@ namespace BIS.Core.Config
             while (i < tokens.Count && tokens[i].Type != ConfigTokenType.Eof)
             {
                 var t = tokens[i];
-                if (t.Type == ConfigTokenType.Identifier && t.Value.Length > 0 && t.Value[0] == '#')
+                if (t.Type == ConfigTokenType.Identifier && DirectiveKeywords.Contains(t.Value))
                     break;
                 exprTokens.Add(t);
                 i++;
@@ -372,72 +460,60 @@ namespace BIS.Core.Config
             return SkipLine(tokens, idx);
         }
 
-        private bool EvaluateIfExpression(List<ConfigToken> tokens)
+        private bool EvaluateIfExpression(List<ConfigToken> tokens) => EvaluateIfExpression(tokens, 0, tokens.Count);
+
+        private bool EvaluateIfExpression(List<ConfigToken> tokens, int start, int end)
         {
-            // Basic expression evaluator for #if
-            // Supports: defined(MACRO), !defined(MACRO), integers, ==, !=, ||, &&
-            if (tokens.Count == 0)
+            int count = end - start;
+            if (count == 0)
                 return false;
 
             // Simple cases: defined(MACRO)
-            if (TryMatchDefined(tokens, out var result))
+            if (TryMatchDefined(tokens, start, end, out var result))
                 return result;
 
             // Simple: single integer (0=false, non-zero=true)
-            if (tokens.Count == 1 && tokens[0].Type == ConfigTokenType.IntegerLiteral)
-                return tokens[0].Value != "0";
+            if (count == 1 && tokens[start].Type == ConfigTokenType.IntegerLiteral)
+                return tokens[start].Value != "0";
 
             // Simple: identifier (check if defined and non-zero)
-            if (tokens.Count == 1 && tokens[0].Type == ConfigTokenType.Identifier)
+            if (count == 1 && tokens[start].Type == ConfigTokenType.Identifier)
             {
-                if (_defines.TryGetValue(tokens[0].Value, out var val) && val != null)
+                if (_defines.TryGetValue(tokens[start].Value, out var val) && val != null)
                 {
                     if (int.TryParse(val, out var num))
                         return num != 0;
                     return !string.IsNullOrEmpty(val);
                 }
-                return _defines.ContainsKey(tokens[0].Value);
+                return _defines.ContainsKey(tokens[start].Value);
             }
 
             // Not: !defined(MACRO) or !identifier
-            if (tokens.Count >= 2 && tokens[0].Type == ConfigTokenType.Identifier && tokens[0].Value == "!")
-            {
-                var rest = tokens.Skip(1).ToList();
-                return !EvaluateIfExpression(rest);
-            }
+            if (count >= 2 && tokens[start].Type == ConfigTokenType.Identifier && tokens[start].Value == "!")
+                return !EvaluateIfExpression(tokens, start + 1, end);
 
             // Logical OR: expr || expr
-            for (int i = 0; i < tokens.Count; i++)
+            for (int i = start; i < end; i++)
             {
                 if (tokens[i].Type == ConfigTokenType.Identifier && tokens[i].Value == "||")
-                {
-                    var left = tokens.Take(i).ToList();
-                    var right = tokens.Skip(i + 1).ToList();
-                    return EvaluateIfExpression(left) || EvaluateIfExpression(right);
-                }
+                    return EvaluateIfExpression(tokens, start, i) || EvaluateIfExpression(tokens, i + 1, end);
             }
 
             // Logical AND: expr && expr
-            for (int i = 0; i < tokens.Count; i++)
+            for (int i = start; i < end; i++)
             {
                 if (tokens[i].Type == ConfigTokenType.Identifier && tokens[i].Value == "&&")
-                {
-                    var left = tokens.Take(i).ToList();
-                    var right = tokens.Skip(i + 1).ToList();
-                    return EvaluateIfExpression(left) && EvaluateIfExpression(right);
-                }
+                    return EvaluateIfExpression(tokens, start, i) && EvaluateIfExpression(tokens, i + 1, end);
             }
 
             // Comparison: left == right or left != right
-            for (int i = 0; i < tokens.Count; i++)
+            for (int i = start; i < end; i++)
             {
                 if (tokens[i].Type == ConfigTokenType.Identifier &&
                     (tokens[i].Value == "==" || tokens[i].Value == "!="))
                 {
-                    var left = tokens.Take(i).ToList();
-                    var right = tokens.Skip(i + 1).ToList();
-                    var lVal = GetExpressionValue(left);
-                    var rVal = GetExpressionValue(right);
+                    var lVal = GetExpressionValue(tokens, start, i);
+                    var rVal = GetExpressionValue(tokens, i + 1, end);
                     return tokens[i].Value == "==" ? lVal == rVal : lVal != rVal;
                 }
             }
@@ -445,49 +521,51 @@ namespace BIS.Core.Config
             return false;
         }
 
-        private bool TryMatchDefined(List<ConfigToken> tokens, out bool result)
+        private bool TryMatchDefined(List<ConfigToken> tokens, int start, int end, out bool result)
         {
+            int count = end - start;
             result = false;
             // defined(MACRO)
-            if (tokens.Count >= 4 &&
-                tokens[0].Type == ConfigTokenType.Identifier && tokens[0].Value.Equals("defined", StringComparison.OrdinalIgnoreCase) &&
-                tokens[1].Type == ConfigTokenType.OpenBrace &&
-                tokens[2].Type == ConfigTokenType.Identifier &&
-                tokens[3].Type == ConfigTokenType.CloseBrace)
+            if (count >= 4 &&
+                tokens[start].Type == ConfigTokenType.Identifier && tokens[start].Value.Equals("defined", StringComparison.OrdinalIgnoreCase) &&
+                tokens[start + 1].Type == ConfigTokenType.OpenBrace &&
+                tokens[start + 2].Type == ConfigTokenType.Identifier &&
+                tokens[start + 3].Type == ConfigTokenType.CloseBrace)
             {
-                result = _defines.ContainsKey(tokens[2].Value);
+                result = _defines.ContainsKey(tokens[start + 2].Value);
                 return true;
             }
 
             // defined MACRO (without parentheses - GCC extension, also supported by Armake)
-            if (tokens.Count >= 2 &&
-                tokens[0].Type == ConfigTokenType.Identifier && tokens[0].Value.Equals("defined", StringComparison.OrdinalIgnoreCase) &&
-                tokens[1].Type == ConfigTokenType.Identifier)
+            if (count >= 2 &&
+                tokens[start].Type == ConfigTokenType.Identifier && tokens[start].Value.Equals("defined", StringComparison.OrdinalIgnoreCase) &&
+                tokens[start + 1].Type == ConfigTokenType.Identifier)
             {
-                result = _defines.ContainsKey(tokens[1].Value);
+                result = _defines.ContainsKey(tokens[start + 1].Value);
                 return true;
             }
 
             return false;
         }
 
-        private string GetExpressionValue(List<ConfigToken> tokens)
+        private string GetExpressionValue(List<ConfigToken> tokens, int start, int end)
         {
-            if (tokens.Count == 0)
+            int count = end - start;
+            if (count == 0)
                 return "0";
 
-            if (tokens[0].Type == ConfigTokenType.IntegerLiteral)
-                return tokens[0].Value;
+            if (tokens[start].Type == ConfigTokenType.IntegerLiteral)
+                return tokens[start].Value;
 
-            if (tokens[0].Type == ConfigTokenType.Identifier)
+            if (tokens[start].Type == ConfigTokenType.Identifier)
             {
                 // Check if defined
-                if (_defines.TryGetValue(tokens[0].Value, out var val))
+                if (_defines.TryGetValue(tokens[start].Value, out var val))
                     return val ?? "1"; // defined but empty = 1
                 return "0"; // not defined
             }
 
-            return tokens[0].Value;
+            return tokens[start].Value;
         }
 
         private int HandleElse(List<ConfigToken> tokens, int idx, Stack<ConditionalState> stack)
@@ -544,7 +622,7 @@ namespace BIS.Core.Config
                 while (i < tokens.Count && tokens[i].Type != ConfigTokenType.Eof)
                 {
                     var t = tokens[i];
-                    if (t.Type == ConfigTokenType.Identifier && t.Value.Length > 0 && t.Value[0] == '#')
+                    if (t.Type == ConfigTokenType.Identifier && DirectiveKeywords.Contains(t.Value))
                         break;
                     exprTokens.Add(t);
                     i++;
@@ -575,7 +653,7 @@ namespace BIS.Core.Config
             while (i < tokens.Count && tokens[i].Type != ConfigTokenType.Eof)
             {
                 var t = tokens[i];
-                if (t.Type == ConfigTokenType.Identifier && t.Value.Length > 0 && t.Value[0] == '#')
+                if (t.Type == ConfigTokenType.Identifier && DirectiveKeywords.Contains(t.Value))
                     break;
                 msgParts.Add(t.Value);
                 i++;

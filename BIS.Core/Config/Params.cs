@@ -35,6 +35,8 @@ namespace BIS.Core.Config
     public abstract class ParamEntry
     {
         public string Name { get; protected set; }
+        public int Line { get; set; }
+        public string File { get; set; } = "";
 
         public static ParamEntry ReadParamEntry(BinaryReaderEx input)
         {
@@ -251,6 +253,11 @@ $@"{classHead}
             Value = new RawValue(value);
         }
         public ParamValue(string name, float value)
+        {
+            Name = name;
+            Value = new RawValue(value);
+        }
+        public ParamValue(string name, long value)
         {
             Name = name;
             Value = new RawValue(value);

@@ -22,6 +22,7 @@ namespace BIS.Core.Config
         Comma,          // ,
         Colon,          // :
         PlusAssign,     // +=
+        Newline,        // \n (preserved for preprocessor line tracking)
     }
 
     public readonly struct ConfigToken
@@ -57,10 +58,14 @@ namespace BIS.Core.Config
             {
                 char c = source[i];
 
-                // Whitespace
+                // Whitespace — preserve newlines for preprocessor line ending detection
                 if (char.IsWhiteSpace(c))
                 {
-                    if (c == '\n') line++;
+                    if (c == '\n')
+                    {
+                        tokens.Add(new ConfigToken(ConfigTokenType.Newline, "\n", line, fileName));
+                        line++;
+                    }
                     i++;
                     continue;
                 }
@@ -86,12 +91,13 @@ namespace BIS.Core.Config
                     continue;
                 }
 
-                // String literal
-                if (c == '"')
+                // String literal (double or single quoted)
+                if (c == '"' || c == '\'')
                 {
+                    char quote = c;
                     i++;
                     var sb = new StringBuilder();
-                    while (i < source.Length && source[i] != '"')
+                    while (i < source.Length && source[i] != quote)
                     {
                         if (source[i] == '\\' && i + 1 < source.Length)
                         {
@@ -103,6 +109,7 @@ namespace BIS.Core.Config
                                 case 'r': sb.Append('\r'); break;
                                 case '\\': sb.Append('\\'); break;
                                 case '"': sb.Append('"'); break;
+                                case '\'': sb.Append('\''); break;
                                 default: sb.Append('\\'); sb.Append(source[i]); break;
                             }
                         }
@@ -112,7 +119,7 @@ namespace BIS.Core.Config
                         }
                         i++;
                     }
-                    if (i < source.Length) i++; // skip closing "
+                    if (i < source.Length) i++; // skip closing quote
                     tokens.Add(new ConfigToken(ConfigTokenType.StringLiteral, sb.ToString(), line, fileName));
                     continue;
                 }

@@ -1,3 +1,5 @@
+using System.IO;
+using BIS.Core.Config;
 using Xunit;
 
 namespace BIS.IntegrationTest;
@@ -14,6 +16,17 @@ public class RvmatIntegrationTests
         if (s.Read(header, 0, 4) < 4)
             return false;
         return header[0] != 0x00 || header[1] != 0x72 || header[2] != 0x61 || header[3] != 0x50;
+    }
+
+    private static string ReadRvmatText(string file)
+    {
+        if (IsTextRvmat(file))
+            return File.ReadAllText(file);
+        using var input = File.OpenRead(file);
+        using var output = new MemoryStream();
+        ConfigSerializer.Serialize(input, output);
+        output.Position = 0;
+        return new StreamReader(output).ReadToEnd();
     }
 
     [Fact]
@@ -39,7 +52,7 @@ public class RvmatIntegrationTests
         var file = TestData.GetFile("rvmat", "*.rvmat");
         if (file == null) return;
 
-        var text = File.ReadAllText(file);
+        var text = ReadRvmatText(file);
         Assert.Contains("class", text, StringComparison.OrdinalIgnoreCase);
         Assert.True(text.Length > 10);
     }

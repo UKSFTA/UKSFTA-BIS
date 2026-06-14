@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BIS.Core\BIS.Core.csproj" />
+    <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
+    <ProjectReference Include="..\BIS.PAA\BIS.PAA.csproj" />
+    <ProjectReference Include="..\BIS.PBO\BIS.PBO.csproj" />
+  </ItemGroup>
+
+</Project>

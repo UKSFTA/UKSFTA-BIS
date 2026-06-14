@@ -134,7 +134,6 @@ namespace BIS.PBO.Deobfuscator
         private static string SerializeToConfigText(ParamFile config)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("#version 12");
             foreach (var entry in config.Root.Entries)
             {
                 SerializeEntry(sb, entry, 0);

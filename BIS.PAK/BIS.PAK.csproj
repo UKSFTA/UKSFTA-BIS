@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Enfusion PAK format reader for DayZ/Arma cache files</Description>
+  </PropertyGroup>
+
+</Project>

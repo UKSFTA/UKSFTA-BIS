@@ -1,3 +1,6 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '')]
+param()
+
 <#
 .SYNOPSIS
     Fetch Bohemia Interactive Licensed Data Packages for format testing.
@@ -231,7 +234,7 @@ if (Test-Path $PboDir) {
                 try {
                     & dotnet $extractorOut $pbo.FullName $extractDir 2>$null
                 } catch {
-                    # Extraction failures are non-fatal
+                    Write-Verbose "Extraction of $($pbo.Name) failed: $_"
                 }
 
                 Copy-Files -SrcDir $extractDir -DstDir (Join-Path $ScriptDir "paa") -Pattern "*.paa" -MaxFiles 10

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
+    <ProjectReference Include="..\BIS.PAA\BIS.PAA.csproj" />
+    <ProjectReference Include="..\BIS.PBO\BIS.PBO.csproj" />
+    <ProjectReference Include="..\BIS.Core\BIS.Core.csproj" />
+    <ProjectReference Include="..\BIS.Stringtable\BIS.Stringtable.csproj" />
+    <ProjectReference Include="..\BIS.SQF\BIS.SQF.csproj" />
+  </ItemGroup>
+
+</Project>

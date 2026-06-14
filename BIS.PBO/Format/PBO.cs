@@ -397,10 +397,19 @@ namespace BIS.PBO
                 byte[] rawData;
                 using (var stream = file.OpenRead())
                 {
-                    using (var ms = new MemoryStream())
+                    if (stream.CanSeek)
                     {
-                        stream.CopyTo(ms);
-                        rawData = ms.ToArray();
+                        int len = (int)stream.Length;
+                        rawData = new byte[len];
+                        stream.ReadExactly(rawData, 0, len);
+                    }
+                    else
+                    {
+                        using (var ms = new MemoryStream())
+                        {
+                            stream.CopyTo(ms);
+                            rawData = ms.ToArray();
+                        }
                     }
                 }
 

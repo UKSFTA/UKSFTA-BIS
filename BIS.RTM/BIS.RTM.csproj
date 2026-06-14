@@ -5,4 +5,8 @@
     <Description>RTM skeletal animation file format parsing</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\BIS.Core\BIS.Core.csproj" />
+  </ItemGroup>
+
 </Project>

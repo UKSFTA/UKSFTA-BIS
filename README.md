@@ -2,6 +2,13 @@
 
 **ArmA File Format Library for the UKSFTA development pipeline.**
 
+[![Build](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/build.yml?label=build&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/build.yml)
+[![Tests](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/test.yml?label=tests&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/test.yml)
+[![Lint](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/lint.yml?label=lint&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/lint.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
+[![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows-lightgrey)](.github/workflows)
+
 A centralized, cross-platform library providing high-performance reading, manipulation, and serialization for common Bohemia Interactive file formats across multiple Arma generations (Cold War Crisis through Reforger). This library is the foundational core for the UKSFTA mod suite, enabling robust model forensics, auditing, and automated processing.
 
 ## 🚀 Key Features

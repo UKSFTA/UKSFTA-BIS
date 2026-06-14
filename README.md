@@ -171,3 +171,13 @@ Three focused GitHub Actions workflows replace a former monolithic pipeline:
 ## ⚖ License
 
 This project is licensed under the **MIT License**. See the `LICENSE` file for full details.
+
+## 🙏 Acknowledgements
+
+This library builds upon work from two upstream projects:
+
+- **[jetelain/bis-file-formats](https://github.com/jetelain/bis-file-formats)** — The fork this repository was originally derived from, containing the most up-to-date format parsers.
+- **[Braini01/bis-file-formats](https://github.com/Braini01/bis-file-formats)** — The original upstream project that laid the foundation for many of the format implementations.
+
+Individual module `<Authors>` metadata in the `.csproj` files retains the original
+author credit for each module.

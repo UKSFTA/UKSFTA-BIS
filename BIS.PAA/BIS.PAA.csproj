@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Authors>Braini01</Authors>
+    <Authors>UKSFTA</Authors>
     <Description>PAA/PAC texture format reading, pixel data extraction, and PNG conversion</Description>
   </PropertyGroup>
 

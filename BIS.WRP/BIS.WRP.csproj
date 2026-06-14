@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Authors>Braini01, GrueArbre</Authors>
+    <Authors>UKSFTA</Authors>
     <Description>WRP/OPRW world and terrain file format parsing</Description>
   </PropertyGroup>
 

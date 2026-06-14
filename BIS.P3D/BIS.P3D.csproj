@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Authors>Braini01</Authors>
+    <Authors>UKSFTA</Authors>
     <Description>ODOL and MLOD model format parsing with full LOD and structure support</Description>
   </PropertyGroup>
 

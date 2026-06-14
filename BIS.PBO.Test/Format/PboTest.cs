@@ -289,15 +289,17 @@ namespace BIS.PBO.Test.Format
             {
                 pbo.SaveTo(tempFile);
 
-                var loaded = new PBO(tempFile);
-                var entry = loaded.FindFile("payload.dll");
-                Assert.NotNull(entry);
-                Assert.Equal(originalData.Length, entry.Size);
+                using (var loaded = new PBO(tempFile))
+                {
+                    var entry = loaded.FindFile("payload.dll");
+                    Assert.NotNull(entry);
+                    Assert.Equal(originalData.Length, entry.Size);
 
-                using var stream = entry.OpenRead();
-                using var ms = new MemoryStream();
-                stream.CopyTo(ms);
-                Assert.Equal(originalData, ms.ToArray());
+                    using var stream = entry.OpenRead();
+                    using var ms = new MemoryStream();
+                    stream.CopyTo(ms);
+                    Assert.Equal(originalData, ms.ToArray());
+                }
             }
             finally
             {

@@ -78,33 +78,35 @@ namespace BIS.PBO.Test.Format
                 Assert.True(savedSize > 100, $"Saved PBO too small: {savedSize} bytes");
 
                 // ── Re-open and verify ──
-                var reopened = new PBO(tempFile);
-                Assert.Equal("testmod", reopened.Prefix);
-                Assert.Equal(3, reopened.Files.Count);
-
-                // Verify file order preserved
-                Assert.Equal(@"config.cpp", reopened.Files[0].FileName);
-                Assert.Equal(@"data\texture.paa", reopened.Files[1].FileName);
-                Assert.Equal(@"model\mesh.p3d", reopened.Files[2].FileName);
-
-                // Verify content
-                using (var stream = reopened.Files[0].OpenRead())
-                using (var reader = new StreamReader(stream))
+                using (var reopened = new PBO(tempFile))
                 {
-                    Assert.Equal("class CfgPatches {};", reader.ReadToEnd());
-                }
+                    Assert.Equal("testmod", reopened.Prefix);
+                    Assert.Equal(3, reopened.Files.Count);
 
-                using (var stream = reopened.Files[1].OpenRead())
-                {
-                    byte[] buf = new byte[4];
-                    stream.ReadExactly(buf, 0, 4);
-                    Assert.Equal(new byte[] { 0x00, (byte)'r', (byte)'a', (byte)'S' }, buf);
-                }
+                    // Verify file order preserved
+                    Assert.Equal(@"config.cpp", reopened.Files[0].FileName);
+                    Assert.Equal(@"data\texture.paa", reopened.Files[1].FileName);
+                    Assert.Equal(@"model\mesh.p3d", reopened.Files[2].FileName);
 
-                using (var stream = reopened.Files[2].OpenRead())
-                using (var reader = new StreamReader(stream))
-                {
-                    Assert.Equal("ODOLformat", reader.ReadToEnd());
+                    // Verify content
+                    using (var stream = reopened.Files[0].OpenRead())
+                    using (var reader = new StreamReader(stream))
+                    {
+                        Assert.Equal("class CfgPatches {};", reader.ReadToEnd());
+                    }
+
+                    using (var stream = reopened.Files[1].OpenRead())
+                    {
+                        byte[] buf = new byte[4];
+                        stream.ReadExactly(buf, 0, 4);
+                        Assert.Equal(new byte[] { 0x00, (byte)'r', (byte)'a', (byte)'S' }, buf);
+                    }
+
+                    using (var stream = reopened.Files[2].OpenRead())
+                    using (var reader = new StreamReader(stream))
+                    {
+                        Assert.Equal("ODOLformat", reader.ReadToEnd());
+                    }
                 }
             }
             finally
@@ -137,16 +139,18 @@ namespace BIS.PBO.Test.Format
 
                 pbo.SaveTo(tempFile);
 
-                var reopened = new PBO(tempFile);
-                Assert.Equal(2, reopened.Files.Count);
+                using (var reopened = new PBO(tempFile))
+                {
+                    Assert.Equal(2, reopened.Files.Count);
 
-                using (var stream = reopened.Files[0].OpenRead())
-                using (var reader = new StreamReader(stream))
-                    Assert.Equal("from disk", reader.ReadToEnd());
+                    using (var stream = reopened.Files[0].OpenRead())
+                    using (var reader = new StreamReader(stream))
+                        Assert.Equal("from disk", reader.ReadToEnd());
 
-                using (var stream = reopened.Files[1].OpenRead())
-                using (var reader = new StreamReader(stream))
-                    Assert.Equal("from memory", reader.ReadToEnd());
+                    using (var stream = reopened.Files[1].OpenRead())
+                    using (var reader = new StreamReader(stream))
+                        Assert.Equal("from memory", reader.ReadToEnd());
+                }
             }
             finally
             {
@@ -169,21 +173,25 @@ namespace BIS.PBO.Test.Format
                 pbo.SaveTo(tempFile);
 
                 // Re-open and modify
-                var reopened = new PBO(tempFile);
-                Assert.Single(reopened.Files);
-                Assert.Equal("original", ReadAllText(reopened.Files[0]));
+                using (var reopened = new PBO(tempFile))
+                {
+                    Assert.Single(reopened.Files);
+                    Assert.Equal("original", ReadAllText(reopened.Files[0]));
 
-                // Replace with PBOFileInMemory
-                reopened.Files[0] = new PBOFileInMemory(
-                    reopened.Files[0].FileName,
-                    Encoding.ASCII.GetBytes("modified"));
+                    // Replace with PBOFileInMemory
+                    reopened.Files[0] = new PBOFileInMemory(
+                        reopened.Files[0].FileName,
+                        Encoding.ASCII.GetBytes("modified"));
 
-                reopened.SaveTo(tempFile);
+                    reopened.SaveTo(tempFile);
+                }
 
                 // Re-open again and verify
-                var modified = new PBO(tempFile);
-                Assert.Single(modified.Files);
-                Assert.Equal("modified", ReadAllText(modified.Files[0]));
+                using (var modified = new PBO(tempFile))
+                {
+                    Assert.Single(modified.Files);
+                    Assert.Equal("modified", ReadAllText(modified.Files[0]));
+                }
             }
             finally
             {

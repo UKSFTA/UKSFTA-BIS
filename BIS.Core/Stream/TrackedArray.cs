@@ -24,7 +24,7 @@ namespace BIS.Core
 
         public T this[int index] => Value[index];
 
-        internal T[] Value { get; }
+        public T[] Value { get; }
 
         public byte[] OriginCompressedData { get; }
 

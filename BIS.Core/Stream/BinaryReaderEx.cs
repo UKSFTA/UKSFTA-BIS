@@ -41,15 +41,16 @@ namespace BIS.Core.Streams
 
         public uint ReadUInt24()
         {
-            return (uint)(ReadByte() + (ReadByte() << 8) + (ReadByte() << 16));
+            Span<byte> b = stackalloc byte[3];
+            ReadExactly(b);
+            return (uint)(b[0] | (b[1] << 8) | (b[2] << 16));
         }
 
         public string ReadAscii(int count)
         {
-            var str = new StringBuilder();
-            for (int index = 0; index < count; ++index)
-                str.Append((char)ReadByte());
-            return str.ToString();
+            byte[] buffer = new byte[count];
+            BaseStream.ReadExactly(buffer, 0, count);
+            return Encoding.ASCII.GetString(buffer);
         }
 
         public string ReadAscii()
@@ -66,20 +67,73 @@ namespace BIS.Core.Streams
 
         public string ReadAsciiz()
         {
-            var str = new StringBuilder();
-            char ch;
-            while ((ch = (char)ReadByte()) != 0)
-                str.Append(ch);
-            return str.ToString();
+            const int chunkSize = 256;
+            byte[] buffer = new byte[chunkSize];
+            int total = 0;
+            while (true)
+            {
+                byte[] chunk = ReadBytes(chunkSize);
+                if (chunk.Length == 0)
+                    break;
+                for (int i = 0; i < chunk.Length; i++)
+                {
+                    if (chunk[i] == 0)
+                    {
+                        // Rewind stream to just past the null terminator
+                        int bytesBeyondNull = chunk.Length - (i + 1);
+                        if (bytesBeyondNull > 0)
+                            BaseStream.Position -= bytesBeyondNull;
+
+                        int totalLen = total + i;
+                        if (totalLen == 0)
+                            return string.Empty;
+                        byte[] result = new byte[totalLen];
+                        if (total > 0) Buffer.BlockCopy(buffer, 0, result, 0, total);
+                        if (i > 0) Array.Copy(chunk, 0, result, total, i);
+                        return Encoding.Latin1.GetString(result);
+                    }
+                }
+                if (total + chunk.Length > buffer.Length)
+                    Array.Resize(ref buffer, total + chunk.Length + chunkSize);
+                Buffer.BlockCopy(chunk, 0, buffer, total, chunk.Length);
+                total += chunk.Length;
+            }
+            return total > 0 ? Encoding.Latin1.GetString(buffer, 0, total) : string.Empty;
         }
 
         public string ReadUTF8z()
         {
-            var str = new List<byte>();
-            byte ch;
-            while ((ch = ReadByte()) != 0)
-                str.Add(ch);
-            return Encoding.UTF8.GetString(str.ToArray());
+            const int chunkSize = 256;
+            byte[] buffer = new byte[chunkSize];
+            int total = 0;
+            while (true)
+            {
+                byte[] chunk = ReadBytes(chunkSize);
+                if (chunk.Length == 0)
+                    break;
+                for (int i = 0; i < chunk.Length; i++)
+                {
+                    if (chunk[i] == 0)
+                    {
+                        int bytesBeyondNull = chunk.Length - (i + 1);
+                        if (bytesBeyondNull > 0)
+                            BaseStream.Position -= bytesBeyondNull;
+
+                        int totalLen = total + i;
+                        if (totalLen == 0)
+                            return string.Empty;
+                        byte[] result = new byte[totalLen];
+                        if (total > 0) Buffer.BlockCopy(buffer, 0, result, 0, total);
+                        if (i > 0) Array.Copy(chunk, 0, result, total, i);
+                        return Encoding.UTF8.GetString(result);
+                    }
+                }
+                if (total + chunk.Length > buffer.Length)
+                    Array.Resize(ref buffer, total + chunk.Length + chunkSize);
+                Buffer.BlockCopy(chunk, 0, buffer, total, chunk.Length);
+                total += chunk.Length;
+            }
+            return total > 0 ? Encoding.UTF8.GetString(buffer, 0, total) : string.Empty;
         }
 
         public TrackedArray<T> ReadTracked<T>(Func<BinaryReaderEx, T[]> read)
@@ -127,9 +181,35 @@ namespace BIS.Core.Streams
             return ReadTracked(r => r.ReadCompressedArray(readElement, elemSize));
         }
 
-        public short[] ReadCompressedShortArray() => ReadCompressedArray(i => i.ReadInt16(), 2);
-        public int[] ReadCompressedIntArray() => ReadCompressedArray(i => i.ReadInt32(), 4);
-        public float[] ReadCompressedFloatArray() => ReadCompressedArray(i => i.ReadSingle(), 4);
+        public short[] ReadCompressedShortArray()
+        {
+            int nElements = ReadInt32();
+            var expected = (uint)(nElements * 2);
+            var decompressed = ReadCompressed(expected);
+            var result = new short[nElements];
+            Buffer.BlockCopy(decompressed, 0, result, 0, decompressed.Length);
+            return result;
+        }
+
+        public int[] ReadCompressedIntArray()
+        {
+            int nElements = ReadInt32();
+            var expected = (uint)(nElements * 4);
+            var decompressed = ReadCompressed(expected);
+            var result = new int[nElements];
+            Buffer.BlockCopy(decompressed, 0, result, 0, decompressed.Length);
+            return result;
+        }
+
+        public float[] ReadCompressedFloatArray()
+        {
+            int nElements = ReadInt32();
+            var expected = (uint)(nElements * 4);
+            var decompressed = ReadCompressed(expected);
+            var result = new float[nElements];
+            Buffer.BlockCopy(decompressed, 0, result, 0, decompressed.Length);
+            return result;
+        }
         public byte[] ReadCompressedByteArray() => ReadCompressedArray(i => i.ReadByte(), 1);
 
         public TrackedArray<int> ReadCompressedIntArrayTracked()
@@ -294,7 +374,12 @@ namespace BIS.Core.Streams
 
         public float[] ReadCompressedFloats(int nElements)
         {
-            return ReadCompressed(r => r.ReadSingle(), nElements, 4);
+            if (nElements == 0) return [];
+            var expected = (uint)(nElements * 4);
+            var decompressed = ReadCompressed(expected);
+            var result = new float[nElements];
+            Buffer.BlockCopy(decompressed, 0, result, 0, decompressed.Length);
+            return result;
         }
 
         public float[] ReadFloats(int nElements)

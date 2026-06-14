@@ -14,6 +14,7 @@ namespace BIS.Core.Streams
     {
         public bool UseCompressionFlag { get; set; }
         public bool UseLZOCompression { get; set; }
+        public bool UseOptimalCompression { get; set; }
         public long Position
         {
             get
@@ -116,16 +117,17 @@ namespace BIS.Core.Streams
         public void WriteCompressedArray<T>(T[] array, Action<BinaryWriterEx, T> write, int size, bool forceCompressed = false)
         {
             var mem = new MemoryStream();
-            using (var writer = new BinaryWriterEx(mem))
-            {
-                writer.WriteArrayBase(array, write);
-            }
+            var writer = new BinaryWriterEx(mem, true);
+            writer.WriteArrayBase(array, write);
+            writer.Flush();
             Write(array.Length);
-            var bytes = mem.ToArray();
-            if (array.Length * size != bytes.Length)
+            if (array.Length * size != (int)mem.Length)
             {
                 throw new InvalidOperationException();
             }
+            var bytes = mem.GetBuffer();
+            if (bytes.Length != (int)mem.Length)
+                bytes = mem.ToArray();
             WriteCompressed(bytes, forceCompressed);
         }
 
@@ -153,7 +155,7 @@ namespace BIS.Core.Streams
             }
             else
             {
-                WriteLZSS(bytes);
+                WriteLZSS(bytes, useOptimal: UseOptimalCompression);
             }
         }
 
@@ -178,7 +180,7 @@ namespace BIS.Core.Streams
             }
         }
 
-        public void WriteLZSS(byte[] bytes, bool inPAA = false)
+        public void WriteLZSS(byte[] bytes, bool inPAA = false, bool useOptimal = false)
         {
             if (bytes.Length < 1024 && !inPAA) //data is always compressed in PAAs
             {
@@ -186,14 +188,35 @@ namespace BIS.Core.Streams
             }
             else
             {
-                var csum = inPAA ? bytes.Sum(e => (int)(sbyte)e) : bytes.Sum(e => (int)(byte)e);
-                using (var lzss = new LzssStream(BaseStream, System.IO.Compression.CompressionMode.Compress, true))
+                int csum;
+                if (inPAA)
                 {
-                    lzss.Write(bytes, 0, bytes.Length);
+                    csum = 0;
+                    for (int i = 0; i < bytes.Length; i++)
+                        csum += (sbyte)bytes[i];
                 }
+                else
+                {
+                    csum = 0;
+                    for (int i = 0; i < bytes.Length; i++)
+                        csum += bytes[i];
+                }
+
+                if (useOptimal)
+                {
+                    var compressed = LzssOptimalEncoder.Compress(bytes);
+                    Write(compressed);
+                }
+                else
+                {
+                    using (var lzss = new LzssStream(BaseStream, System.IO.Compression.CompressionMode.Compress, true))
+                    {
+                        lzss.Write(bytes, 0, bytes.Length);
+                    }
+                }
+
                 Write(BitConverter.GetBytes(csum));
             }
-
         }
 
         public void WriteUInt24(uint length)
@@ -257,6 +280,12 @@ namespace BIS.Core.Streams
         public void WriteCondensedArray<T>(T[] array, Action<BinaryWriterEx, T> write, int sizeOf)
             where T : IEquatable<T>
         {
+            if (array.Length == 0)
+            {
+                Write(0);
+                Write(false);
+                return;
+            }
 
             var distinct = array.Distinct().ToList();
             if (distinct.Count == 1)
@@ -269,18 +298,20 @@ namespace BIS.Core.Streams
             {
 
                 var mem = new MemoryStream();
-                using (var writer = new BinaryWriterEx(mem))
+                using (var writer = new BinaryWriterEx(mem, true))
                 {
                     writer.WriteArrayBase(array, write);
                 }
-                var bytes = mem.ToArray();
-                if (array.Length * sizeOf != bytes.Length)
+                if (array.Length * sizeOf != (int)mem.Length)
                 {
                     throw new InvalidOperationException();
                 }
                 Write(array.Length);
                 Write(false);
-                WriteCompressed(mem.ToArray());
+                var buffer = mem.GetBuffer();
+                if (buffer.Length != (int)mem.Length)
+                    buffer = mem.ToArray();
+                WriteCompressed(buffer);
             }
         }
     }

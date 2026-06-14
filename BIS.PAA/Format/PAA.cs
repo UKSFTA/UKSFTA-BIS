@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.IO;
 
 using BIS.Core.Streams;
@@ -86,7 +85,8 @@ namespace BIS.PAA
             {
                 input.Position -= 4;
 
-                Debug.Assert(input.Position == mipmapOffsets[i]);
+                if (input.Position != mipmapOffsets[i])
+                    input.Position = mipmapOffsets[i];
                 var mipmap = new Mipmap(input, mipmapOffsets[i++]);
                 mipmaps.Add(mipmap);
             }

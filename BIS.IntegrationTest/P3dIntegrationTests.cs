@@ -33,7 +33,8 @@ public class P3dIntegrationTests
     [Fact]
     public void Read_NonExistentFile_Throws()
     {
+        var missingFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "__nonexistent_test_file__.p3d");
         Assert.Throws<System.IO.FileNotFoundException>(() =>
-            new global::BIS.P3D.P3D(System.IO.File.OpenRead("/tmp/__nonexistent_test_file__.p3d")));
+            new global::BIS.P3D.P3D(System.IO.File.OpenRead(missingFile)));
     }
 }

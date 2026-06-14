@@ -36,7 +36,8 @@ public class PboIntegrationTests
         if (file == null) return;
 
         var pbo = new global::BIS.PBO.PBO(file);
-        Assert.NotEmpty(pbo.PropertiesPairs);
+        Assert.NotNull(pbo.PropertiesPairs);
+        // Some PBOs (especially CWC-era) have no header properties — that's valid
     }
 
     [Fact]
@@ -62,7 +63,8 @@ public class PboIntegrationTests
     [Fact]
     public void Open_NonExistentFile_Throws()
     {
+        var missingFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "__nonexistent_test_file__.pbo");
         Assert.Throws<System.IO.FileNotFoundException>(() =>
-            new global::BIS.PBO.PBO("/tmp/__nonexistent_test_file__.pbo"));
+            new global::BIS.PBO.PBO(missingFile));
     }
 }

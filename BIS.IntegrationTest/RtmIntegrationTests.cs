@@ -20,8 +20,9 @@ public class RtmIntegrationTests
     [Fact]
     public void Read_NonExistentFile_Throws()
     {
+        var missingFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "__nonexistent_test_file__.rtm");
         Assert.Throws<System.IO.FileNotFoundException>(() =>
-            new global::BIS.RTM.RTM("/tmp/__nonexistent_test_file__.rtm"));
+            new global::BIS.RTM.RTM(missingFile));
     }
 
     [Fact]

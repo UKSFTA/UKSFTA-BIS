@@ -1,0 +1,12 @@
+# Ignore all binary test data files — these are environment-specific,
+# managed via download.sh and local symlinks.
+*
+
+# But track these repository management files
+!.gitignore
+!README.md
+!download.sh
+!download.ps1
+!PboExtract/
+!PboExtract/PboExtract.csproj
+!PboExtract/Program.cs

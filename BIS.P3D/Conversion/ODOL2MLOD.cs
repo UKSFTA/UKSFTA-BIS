@@ -89,6 +89,21 @@ namespace BIS.P3D.Conversion
                 {
                     var pointsSelection = new byte[points.Length];
                     var facesSelection = new byte[faces.Length];
+
+                    if (selection.SelectedVertices != null)
+                    {
+                        var vertSet = new HashSet<int>(selection.SelectedVertices);
+                        for (int i = 0; i < points.Length; i++)
+                            if (vertSet.Contains(i)) pointsSelection[i] = 1;
+                    }
+
+                    if (selection.SelectedFaces != null)
+                    {
+                        var faceSet = new HashSet<int>(selection.SelectedFaces);
+                        for (int i = 0; i < faces.Length; i++)
+                            if (faceSet.Contains(i)) facesSelection[i] = 1;
+                    }
+
                     taggs.Add(new NamedSelectionTagg(selection.Name, pointsSelection, facesSelection));
                 }
             }

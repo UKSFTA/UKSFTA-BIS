@@ -114,7 +114,7 @@ public class CliTest : IDisposable
     {
         WriteFile("test.sqf", "_x = 1 + 2;\n");
         var output = RunCli($"fmt sqf {_tempDir} --check");
-        Assert.Contains("0 would reformat", output);
+        Assert.Contains("all files are clean", output);
     }
 
     // ─── Config lint ──────────────────────────────────────────────

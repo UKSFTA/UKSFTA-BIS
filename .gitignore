@@ -297,3 +297,9 @@ Utils/
 
 # Agent-specific metadata
 .omo/
+
+# BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
+
+# Temporary inspect scripts
+_inspect_qm.csx

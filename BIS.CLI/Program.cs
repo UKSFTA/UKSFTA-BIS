@@ -9,6 +9,7 @@ using BIS.P3D;
 using BIS.SQF;
 using BIS.Stringtable;
 using BIS.PBO;
+using Spectre.Console;
 
 var root = new RootCommand("BIS file format CLI tool")
 {
@@ -174,7 +175,7 @@ foreach (var cmd in root.Children.OfType<Command>())
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Error: {ex.Message}");
+                AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
                 ctx.ExitCode = 1;
             }
         });
@@ -214,7 +215,7 @@ static string[] DiscoverFiles(string path, string pattern)
         return [path];
     if (Directory.Exists(path))
         return Directory.GetFiles(path, pattern, SearchOption.AllDirectories);
-    Console.Error.WriteLine($"Error: '{path}' is not a file or directory");
+    AnsiConsole.MarkupLine($"[red]Error: '{path}' is not a file or directory[/]");
     return [];
 }
 
@@ -223,9 +224,9 @@ static void PrintSummary(string label, int fileCount, int issueCount, long elaps
     var time = elapsedMs > 0 ? $" in {elapsedMs / 1000.0:F1}s" : "";
     var prefix = issueCount > 0 ? "\n" : "";
     if (issueCount == 0)
-        Console.WriteLine($"{prefix}{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, no issues found{time}.");
+        AnsiConsole.MarkupLine($"{prefix}[green]{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, no issues found{time}.[/]");
     else
-        Console.WriteLine($"{prefix}{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, {issueCount} issue{(issueCount == 1 ? "" : "s")} found{time}.");
+        AnsiConsole.MarkupLine($"{prefix}[red]{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, {issueCount} issue{(issueCount == 1 ? "" : "s")} found{time}.[/]");
 }
 
 // ─── Batch handlers ───
@@ -240,11 +241,11 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
     if (files.Length == 0) return exitCode ? 1 : 0;
 
     var allDiagnostics = new List<object>();
-    var allText = new List<string>();
+    var tableRows = new List<(string Code, string Severity, string Color, string Message, string File, string Location)>();
     var sw = Stopwatch.StartNew();
     var fixedCount = 0;
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         try
         {
@@ -253,24 +254,21 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
             var parser = new ConfigParser();
             var config = parser.ParseFile(file, resolver);
 
-            // Collect preprocessor diagnostics
             var preDiags = parser.PreprocessorDiagnostics;
             if (preDiags != null)
             {
                 foreach (var d in preDiags)
                 {
-                    var prefix = $"{file}: ";
                     if (json)
                         allDiagnostics.Add(new { code = d.Code, severity = "Warning", message = d.Message, file = d.File, line = d.Line, path = "" });
                     else
-                        allText.Add(prefix + d.ToString());
+                        tableRows.Add((d.Code, "Warning", "yellow", d.Message, d.File, $"line {d.Line}"));
                 }
             }
 
             var linter = new ConfigLinter();
             var diags = linter.Lint(config, source);
 
-            // Apply fixes if requested
             if (fix && diags.Any(d => d.Fix != null))
             {
                 var fixedSource = ConfigLinter.ApplyFixes(source, diags);
@@ -278,7 +276,6 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
                 {
                     File.WriteAllText(file, fixedSource);
                     fixedCount++;
-                    // Re-lint post-fix
                     source = fixedSource;
                     resolver = new DefaultIncludeResolver(searchDirs ?? []);
                     parser = new ConfigParser();
@@ -293,17 +290,43 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
                 if (json)
                     allDiagnostics.Add(new { code = d.Code, severity = d.Severity.ToString(), message = d.Message, file = d.File, line = d.Line, path = d.Path });
                 else
-                    allText.Add(d.ToString());
+                {
+                    var color = d.Severity.ToString() switch
+                    {
+                        "Error" => "red",
+                        "Warning" => "yellow",
+                        "Help" => "blue",
+                        _ => "white"
+                    };
+                    tableRows.Add((d.Code, d.Severity.ToString(), color, d.Message, d.File, $"line {d.Line}"));
+                }
             }
         }
         catch (Exception ex)
         {
-            var msg = $"{file}: error: {ex.Message}";
             if (json)
                 allDiagnostics.Add(new { code = "PARSE", severity = "Error", message = ex.Message, file, line = 0, path = "" });
             else
-                allText.Add(msg);
+                tableRows.Add(("PARSE", "Error", "red", ex.Message, file, "line 0"));
         }
+    }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Linting {files.Length} config files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
     }
     sw.Stop();
 
@@ -311,14 +334,27 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
     else
     {
-        foreach (var t in allText) Console.WriteLine(t);
+        if (tableRows.Count > 0)
+        {
+            var table = new Table();
+            table.AddColumn("Code");
+            table.AddColumn("Severity");
+            table.AddColumn("Message");
+            table.AddColumn("File");
+            table.AddColumn("Location");
+            foreach (var (code, severity, color, message, file, location) in tableRows)
+            {
+                table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
+            }
+            AnsiConsole.Write(table);
+        }
         if (fixedCount > 0)
-            Console.WriteLine($"\n{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.");
+            AnsiConsole.MarkupLine($"\n[green]{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.[/]");
     }
 
-    var total = allText.Count + allDiagnostics.Count;
+    var total = json ? allDiagnostics.Count : tableRows.Count;
     if (files.Length == 1 && total == 0)
-        Console.WriteLine("No issues found.");
+        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("config", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -329,10 +365,10 @@ static int LintStringtableBatch(string path, bool json, bool exitCode)
     if (files.Length == 0) return exitCode ? 1 : 0;
 
     var allDiagnostics = new List<object>();
-    var allText = new List<string>();
+    var tableRows = new List<(string Code, string Severity, string Color, string Message, string File, string Location)>();
     var sw = Stopwatch.StartNew();
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         try
         {
@@ -342,32 +378,72 @@ static int LintStringtableBatch(string path, bool json, bool exitCode)
 
             foreach (var d in diags)
             {
-                var prefix = $"{file}: ";
                 if (json)
                     allDiagnostics.Add(new { code = d.Code, severity = d.Severity.ToString(), message = d.Message, keyId = d.KeyId, package = d.Package, language = d.Language, file });
                 else
-                    allText.Add(prefix + d.ToString());
+                {
+                    var color = d.Severity.ToString() switch
+                    {
+                        "Error" => "red",
+                        "Warning" => "yellow",
+                        "Help" => "blue",
+                        _ => "white"
+                    };
+                    var loc = !string.IsNullOrEmpty(d.KeyId) ? d.KeyId : "(unknown)";
+                    if (!string.IsNullOrEmpty(d.Package)) loc = $"{d.Package}/{loc}";
+                    if (!string.IsNullOrEmpty(d.Language)) loc = $"{loc}[{d.Language}]";
+                    tableRows.Add((d.Code, d.Severity.ToString(), color, d.Message, file, loc));
+                }
             }
         }
         catch (Exception ex)
         {
-            var msg = $"{file}: error: {ex.Message}";
             if (json)
                 allDiagnostics.Add(new { code = "PARSE", severity = "Error", message = ex.Message, file, keyId = "", package = "", language = "" });
             else
-                allText.Add(msg);
+                tableRows.Add(("PARSE", "Error", "red", ex.Message, file, "—"));
         }
+    }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Linting {files.Length} stringtable files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
     }
     sw.Stop();
 
     if (json)
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
-    else
-        foreach (var t in allText) Console.WriteLine(t);
+    else if (tableRows.Count > 0)
+    {
+        var table = new Table();
+        table.AddColumn("Code");
+        table.AddColumn("Severity");
+        table.AddColumn("Message");
+        table.AddColumn("File");
+        table.AddColumn("Location");
+        foreach (var (code, severity, color, message, file, location) in tableRows)
+        {
+            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
+        }
+        AnsiConsole.Write(table);
+    }
 
-    var total = allText.Count + allDiagnostics.Count;
+    var total = json ? allDiagnostics.Count : tableRows.Count;
     if (files.Length == 1 && total == 0)
-        Console.WriteLine("No issues found.");
+        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("SQF", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -382,10 +458,10 @@ static int LintPreprocessorBatch(string path, bool json, bool exitCode)
     if (files.Length == 0) return exitCode ? 1 : 0;
 
     var allDiagnostics = new List<object>();
-    var allText = new List<string>();
+    var tableRows = new List<(string Code, string Severity, string Color, string Message, string File, string Location)>();
     var sw = Stopwatch.StartNew();
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         try
         {
@@ -396,32 +472,60 @@ static int LintPreprocessorBatch(string path, bool json, bool exitCode)
 
             foreach (var d in diags)
             {
-                var prefix = $"{file}: ";
                 if (json)
                     allDiagnostics.Add(new { code = d.Code, message = d.Message, file = d.File, line = d.Line });
                 else
-                    allText.Add(prefix + d.ToString());
+                    tableRows.Add((d.Code, "Warning", "yellow", d.Message, d.File, $"line {d.Line}"));
             }
         }
         catch (Exception ex)
         {
-            var msg = $"{file}: error: {ex.Message}";
             if (json)
                 allDiagnostics.Add(new { code = "PARSE", severity = "Error", message = ex.Message, file, line = 0 });
             else
-                allText.Add(msg);
+                tableRows.Add(("PARSE", "Error", "red", ex.Message, file, "line 0"));
         }
+    }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Preprocessing {files.Length} config files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
     }
     sw.Stop();
 
     if (json)
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
-    else
-        foreach (var t in allText) Console.WriteLine(t);
+    else if (tableRows.Count > 0)
+    {
+        var table = new Table();
+        table.AddColumn("Code");
+        table.AddColumn("Severity");
+        table.AddColumn("Message");
+        table.AddColumn("File");
+        table.AddColumn("Location");
+        foreach (var (code, severity, color, message, file, location) in tableRows)
+        {
+            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
+        }
+        AnsiConsole.Write(table);
+    }
 
-    var total = allText.Count + allDiagnostics.Count;
+    var total = json ? allDiagnostics.Count : tableRows.Count;
     if (files.Length == 1 && total == 0)
-        Console.WriteLine("No issues found.");
+        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("config", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -432,11 +536,11 @@ static int LintSqfBatch(string path, bool json, bool exitCode, bool fix = false)
     if (files.Length == 0) return exitCode ? 1 : 0;
 
     var allDiagnostics = new List<object>();
-    var allText = new List<string>();
+    var tableRows = new List<(string Code, string Severity, string Color, string Message, string File, string Location)>();
     var sw = Stopwatch.StartNew();
     var fixedCount = 0;
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         try
         {
@@ -464,21 +568,46 @@ static int LintSqfBatch(string path, bool json, bool exitCode, bool fix = false)
 
             foreach (var d in diags)
             {
-                var line = d.ToString();
                 if (json)
                     allDiagnostics.Add(new { code = d.Code, severity = d.Severity.ToString(), message = d.Message, file = d.File, line = d.Line, column = d.Column });
                 else
-                    allText.Add(line);
+                {
+                    var color = d.Severity.ToString() switch
+                    {
+                        "Error" => "red",
+                        "Warning" => "yellow",
+                        "Help" => "blue",
+                        _ => "white"
+                    };
+                    tableRows.Add((d.Code, d.Severity.ToString(), color, d.Message, d.File, $"{d.Line}:{d.Column}"));
+                }
             }
         }
         catch (Exception ex)
         {
-            var msg = $"{file}: error: {ex.Message}";
             if (json)
                 allDiagnostics.Add(new { code = "PARSE", severity = "Error", message = ex.Message, file, line = 0, column = 0 });
             else
-                allText.Add(msg);
+                tableRows.Add(("PARSE", "Error", "red", ex.Message, file, "0:0"));
         }
+    }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Linting {files.Length} SQF files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
     }
     sw.Stop();
 
@@ -486,12 +615,25 @@ static int LintSqfBatch(string path, bool json, bool exitCode, bool fix = false)
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
     else
     {
-        foreach (var t in allText) Console.WriteLine(t);
+        if (tableRows.Count > 0)
+        {
+            var table = new Table();
+            table.AddColumn("Code");
+            table.AddColumn("Severity");
+            table.AddColumn("Message");
+            table.AddColumn("File");
+            table.AddColumn("Location");
+            foreach (var (code, severity, color, message, file, location) in tableRows)
+            {
+                table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
+            }
+            AnsiConsole.Write(table);
+        }
         if (fixedCount > 0)
-            Console.WriteLine($"\n{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.");
+            AnsiConsole.MarkupLine($"\n[green]{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.[/]");
     }
 
-    var total = allText.Count + allDiagnostics.Count;
+    var total = json ? allDiagnostics.Count : tableRows.Count;
     PrintSummary("SQF", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -502,10 +644,10 @@ static int LintPboBatch(string path, bool json, bool exitCode)
     if (files.Length == 0) return exitCode ? 1 : 0;
 
     var allDiagnostics = new List<object>();
-    var allText = new List<string>();
+    var tableRows = new List<(string Code, string Severity, string Color, string Message, string File, string Location)>();
     var sw = Stopwatch.StartNew();
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         try
         {
@@ -515,32 +657,70 @@ static int LintPboBatch(string path, bool json, bool exitCode)
 
             foreach (var d in diags)
             {
-                var line = d.ToString();
                 if (json)
                     allDiagnostics.Add(new { code = d.Code, severity = d.Severity.ToString(), message = d.Message, entryName = d.EntryName, file });
                 else
-                    allText.Add($"{file}: {line}");
+                {
+                    var color = d.Severity.ToString() switch
+                    {
+                        "Error" => "red",
+                        "Warning" => "yellow",
+                        "Help" => "blue",
+                        _ => "white"
+                    };
+                    var loc = string.IsNullOrEmpty(d.EntryName) ? "—" : d.EntryName;
+                    tableRows.Add((d.Code, d.Severity.ToString(), color, d.Message, file, loc));
+                }
             }
         }
         catch (Exception ex)
         {
-            var msg = $"{file}: error: {ex.Message}";
             if (json)
                 allDiagnostics.Add(new { code = "PARSE", severity = "Error", message = ex.Message, file, entryName = "" });
             else
-                allText.Add(msg);
+                tableRows.Add(("PARSE", "Error", "red", ex.Message, file, "—"));
         }
+    }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Linting {files.Length} PBO files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
     }
     sw.Stop();
 
     if (json)
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
-    else
-        foreach (var t in allText) Console.WriteLine(t);
+    else if (tableRows.Count > 0)
+    {
+        var table = new Table();
+        table.AddColumn("Code");
+        table.AddColumn("Severity");
+        table.AddColumn("Message");
+        table.AddColumn("File");
+        table.AddColumn("Location");
+        foreach (var (code, severity, color, message, file, location) in tableRows)
+        {
+            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
+        }
+        AnsiConsole.Write(table);
+    }
 
-    var total = allText.Count + allDiagnostics.Count;
+    var total = json ? allDiagnostics.Count : tableRows.Count;
     if (files.Length == 1 && total == 0)
-        Console.WriteLine("No issues found.");
+        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("PBO", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -550,17 +730,17 @@ static int LintPboBatch(string path, bool json, bool exitCode)
 static void HandleP3DValidate(string path)
 {
     var result = P3DValidator.Analyse(path);
-    Console.WriteLine($"Valid: {result.IsValid}");
-    Console.WriteLine($"Format: {(result.IsMLOD ? "MLOD" : "ODOL")}");
-    Console.WriteLine($"Version: {result.Version}");
-    Console.WriteLine($"LODs: {result.LodCount}");
+    AnsiConsole.MarkupLine($"Valid: [{(result.IsValid ? "green" : "red")}]{result.IsValid}[/]");
+    AnsiConsole.MarkupLine($"Format: [blue]{((result.IsMLOD ? "MLOD" : "ODOL"))}[/]");
+    AnsiConsole.MarkupLine($"Version: {result.Version}");
+    AnsiConsole.MarkupLine($"LODs: {result.LodCount}");
     foreach (var issue in result.Issues)
-        Console.WriteLine($"  [{issue.Severity}] {issue.Code}: {issue.Message}");
-    Console.WriteLine($"Vertices: {result.TotalVertices}");
-    Console.WriteLine($"Faces: {result.TotalFaces}");
+        AnsiConsole.MarkupLine($"  [[yellow]{issue.Severity}[/]] {issue.Code}: {issue.Message}");
+    AnsiConsole.MarkupLine($"Vertices: {result.TotalVertices}");
+    AnsiConsole.MarkupLine($"Faces: {result.TotalFaces}");
     foreach (var lod in result.LODs)
     {
-        Console.WriteLine($"  LOD {lod.Resolution:F1} ({lod.TypeName}): {lod.VertexCount} verts, {lod.FaceCount} faces, {lod.TextureCount} textures");
+        AnsiConsole.MarkupLine($"  LOD {lod.Resolution:F1} ([blue]{lod.TypeName}[/]): {lod.VertexCount} verts, {lod.FaceCount} faces, {lod.TextureCount} textures");
     }
 }
 
@@ -569,22 +749,22 @@ static void HandleP3DInfo(string path)
     using var stream = File.OpenRead(path);
     var p3d = new BIS.P3D.P3D(stream);
 
-    Console.WriteLine($"File: {Path.GetFileName(path)}");
-    Console.WriteLine($"Format: {(p3d.IsODOLFormat ? "ODOL" : p3d.IsMLODFormat ? "MLOD" : "Unknown")}");
-    Console.WriteLine($"Version: {p3d.Version}");
+    AnsiConsole.MarkupLine($"File: [blue]{Path.GetFileName(path)}[/]");
+    AnsiConsole.MarkupLine($"Format: [blue]{(p3d.IsODOLFormat ? "ODOL" : p3d.IsMLODFormat ? "MLOD" : "Unknown")}[/]");
+    AnsiConsole.MarkupLine($"Version: {p3d.Version}");
 
     if (p3d.ModelInfo != null)
     {
-        Console.WriteLine($"Class: {p3d.ModelInfo.Class}");
-        Console.WriteLine($"Map: {p3d.ModelInfo.MapType}");
+        AnsiConsole.MarkupLine($"Class: {p3d.ModelInfo.Class}");
+        AnsiConsole.MarkupLine($"Map: {p3d.ModelInfo.MapType}");
     }
 
     foreach (var lod in p3d.LODs)
     {
-        Console.WriteLine($"  LOD {lod.Resolution:F1}: {lod.VertexCount} verts, {lod.FaceCount} faces");
+        AnsiConsole.MarkupLine($"  LOD {lod.Resolution:F1}: {lod.VertexCount} verts, {lod.FaceCount} faces");
         var texs = lod.GetTextures()?.ToArray() ?? [];
         if (texs.Length > 0)
-            Console.WriteLine($"    Textures: {string.Join(", ", texs.Take(5))}{(texs.Length > 5 ? $" +{texs.Length - 5} more" : "")}");
+            AnsiConsole.MarkupLine($"    Textures: {string.Join(", ", texs.Take(5))}{(texs.Length > 5 ? $" +{texs.Length - 5} more" : "")}");
     }
 }
 
@@ -598,7 +778,7 @@ static void HandleP3DConvert(string path, FileInfo? output)
     {
         var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
         mlod.WriteToFile(outPath, true);
-        Console.WriteLine($"ODOL->MLOD: {outPath} ({mlod.Lods.Length} LODs)");
+        AnsiConsole.MarkupLine($"ODOL->MLOD: [green]{outPath}[/] ({mlod.Lods.Length} LODs)");
     }
     else if (p3d.MLOD != null)
     {
@@ -606,11 +786,11 @@ static void HandleP3DConvert(string path, FileInfo? output)
         using var outStream = File.Create(outPath);
         var writer = new BIS.Core.Streams.BinaryWriterEx(outStream);
         odol.Write(writer);
-        Console.WriteLine($"MLOD->ODOL: {outPath} ({odol.Lods.Length} LODs)");
+        AnsiConsole.MarkupLine($"MLOD->ODOL: [green]{outPath}[/] ({odol.Lods.Length} LODs)");
     }
     else
     {
-        Console.Error.WriteLine("Unknown P3D format — cannot convert");
+        AnsiConsole.MarkupLine("[red]Unknown P3D format — cannot convert[/]");
     }
 }
 
@@ -621,7 +801,7 @@ static void HandleP3DRoundtrip(string path)
 
     if (p3d.ODOL != null)
     {
-        Console.Write("ODOL -> MLOD -> ODOL: ");
+        AnsiConsole.Markup("ODOL -> MLOD -> ODOL: ");
         var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
         var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(mlod);
         bool ok = odol.Lods.Length == p3d.ODOL.Lods.Length;
@@ -637,18 +817,18 @@ static void HandleP3DRoundtrip(string path)
                 }
             }
         }
-        Console.WriteLine(ok ? "OK" : "MISMATCH");
-        Console.WriteLine($"  LODs: {p3d.ODOL.Lods.Length} -> {odol.Lods.Length}");
+        AnsiConsole.MarkupLine(ok ? "[green]OK[/]" : "[red]MISMATCH[/]");
+        AnsiConsole.MarkupLine($"  LODs: {p3d.ODOL.Lods.Length} -> {odol.Lods.Length}");
         foreach (var origLod in p3d.ODOL.Lods)
         {
             var roundtripLod = odol.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
             if (roundtripLod != null)
-                Console.WriteLine($"  LOD {origLod.Resolution:F1}: {origLod.Vertices.Count} verts -> {roundtripLod.Vertices.Count} verts");
+                AnsiConsole.MarkupLine($"  LOD {origLod.Resolution:F1}: {origLod.Vertices.Count} verts -> {roundtripLod.Vertices.Count} verts");
         }
     }
     else if (p3d.MLOD != null)
     {
-        Console.Write("MLOD -> ODOL -> MLOD: ");
+        AnsiConsole.Markup("MLOD -> ODOL -> MLOD: ");
         var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(p3d.MLOD);
         var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(odol);
         bool ok = mlod.Lods.Length == p3d.MLOD.Lods.Length;
@@ -664,13 +844,13 @@ static void HandleP3DRoundtrip(string path)
                 }
             }
         }
-        Console.WriteLine(ok ? "OK" : "MISMATCH");
-        Console.WriteLine($"  LODs: {p3d.MLOD.Lods.Length} -> {mlod.Lods.Length}");
+        AnsiConsole.MarkupLine(ok ? "[green]OK[/]" : "[red]MISMATCH[/]");
+        AnsiConsole.MarkupLine($"  LODs: {p3d.MLOD.Lods.Length} -> {mlod.Lods.Length}");
         foreach (var origLod in p3d.MLOD.Lods)
         {
             var roundtripLod = mlod.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
             if (roundtripLod != null)
-                Console.WriteLine($"  LOD {origLod.Resolution:F1}: {origLod.Points.Length} points -> {roundtripLod.Points.Length} points");
+                AnsiConsole.MarkupLine($"  LOD {origLod.Resolution:F1}: {origLod.Points.Length} points -> {roundtripLod.Points.Length} points");
         }
     }
 }
@@ -678,41 +858,41 @@ static void HandleP3DRoundtrip(string path)
 static void HandlePAAAnalyze(string path)
 {
     var analysis = BIS.PAA.PaaAnalyzer.Analyze(path);
-    Console.WriteLine($"Format: {analysis.Format}");
-    Console.WriteLine($"Size: {analysis.Width}x{analysis.Height}");
-    Console.WriteLine($"MIP maps: {analysis.MipmapCount}");
-    Console.WriteLine($"Alpha: {(analysis.HasAlpha ? "yes" : "no")}");
-    Console.WriteLine($"Transparency: {(analysis.IsTransparent ? "yes" : "no")}");
-    Console.WriteLine($"Category: {analysis.CategoryLabel}");
+    AnsiConsole.MarkupLine($"Format: [blue]{analysis.Format}[/]");
+    AnsiConsole.MarkupLine($"Size: {analysis.Width}x{analysis.Height}");
+    AnsiConsole.MarkupLine($"MIP maps: {analysis.MipmapCount}");
+    AnsiConsole.MarkupLine($"Alpha: {(analysis.HasAlpha ? "[green]yes[/]" : "[grey]no[/]")}");
+    AnsiConsole.MarkupLine($"Transparency: {(analysis.IsTransparent ? "[green]yes[/]" : "[grey]no[/]")}");
+    AnsiConsole.MarkupLine($"Category: {analysis.CategoryLabel}");
 }
 
 static void HandlePAASuggest(string path)
 {
     var analysis = BIS.PAA.PaaAnalyzer.Analyze(path);
     var suggestion = BIS.PAA.PaaAnalyzer.SuggestOptimalFormat(analysis);
-    Console.WriteLine($"Current: {analysis.Format}");
-    Console.WriteLine($"Optimal: {suggestion.RecommendedFormat}");
-    Console.WriteLine($"Rationale: {suggestion.Rationale}");
-    Console.WriteLine($"Size factor: {suggestion.EstimatedSizeFactor:F3}x");
+    AnsiConsole.MarkupLine($"Current: {analysis.Format}");
+    AnsiConsole.MarkupLine($"Optimal: [green]{suggestion.RecommendedFormat}[/]");
+    AnsiConsole.MarkupLine($"Rationale: {suggestion.Rationale}");
+    AnsiConsole.MarkupLine($"Size factor: {suggestion.EstimatedSizeFactor:F3}x");
     if (!string.IsNullOrEmpty(suggestion.Notes))
-        Console.WriteLine($"Notes: {suggestion.Notes}");
+        AnsiConsole.MarkupLine($"Notes: {suggestion.Notes}");
 }
 
 static void HandlePBOList(string path)
 {
     var pbo = new BIS.PBO.PBO(path);
-    Console.WriteLine($"File: {Path.GetFileName(path)}");
-    Console.WriteLine($"Entries: {pbo.Files.Count}");
+    AnsiConsole.MarkupLine($"File: [blue]{Path.GetFileName(path)}[/]");
+    AnsiConsole.MarkupLine($"Entries: {pbo.Files.Count}");
 
     long totalSize = 0;
     foreach (var entry in pbo.Files)
     {
         int size = entry.Size;
         totalSize += size;
-        string packInfo = entry.IsCompressed ? " (packed)" : "";
-        Console.WriteLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
+        string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
+        AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
     }
-    Console.WriteLine($"Total: {totalSize} bytes");
+    AnsiConsole.MarkupLine($"Total: {totalSize} bytes");
 }
 
 static void HandlePBOExtract(string path, DirectoryInfo? outputDir)
@@ -722,7 +902,7 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir)
 
     var pbo = new BIS.PBO.PBO(path);
     pbo.ExtractFiles(pbo.Files, outDir);
-    Console.WriteLine($"Extracted {pbo.Files.Count} files to {outDir}");
+    AnsiConsole.MarkupLine($"[green]Extracted {pbo.Files.Count} files to {outDir}[/]");
 }
 
 static void HandlePBOPack(string sourceDir, FileInfo? output, string? prefix, bool compress)
@@ -744,7 +924,7 @@ static void HandlePBOPack(string sourceDir, FileInfo? output, string? prefix, bo
     pbo.SaveTo(outPath, compress);
 
     var compressInfo = compress ? " (compressed)" : "";
-    Console.WriteLine($"Packed {files.Length} files{compressInfo} -> {outPath}  (prefix: {prefixVal})");
+    AnsiConsole.MarkupLine($"[green]Packed {files.Length} files{compressInfo} -> {outPath}[/]  (prefix: [blue]{prefixVal}[/])");
 
     // Validate the generated PBO
     try
@@ -753,18 +933,18 @@ static void HandlePBOPack(string sourceDir, FileInfo? output, string? prefix, bo
         var linterDiags = linter.Lint(pbo);
         if (linterDiags.Count > 0)
         {
-            Console.WriteLine("Issues:");
+            AnsiConsole.MarkupLine("[yellow]Issues:[/]");
             foreach (var d in linterDiags)
-                Console.WriteLine($"  {d}");
+                AnsiConsole.MarkupLine($"  [yellow]{d}[/]");
         }
         else
         {
-            Console.WriteLine("No issues found.");
+            AnsiConsole.MarkupLine("[green]No issues found.[/]");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Validation error: {ex.Message}");
+        AnsiConsole.MarkupLine($"[red]Validation error: {ex.Message}[/]");
     }
 }
 
@@ -778,7 +958,7 @@ static int HandleFmtSqf(string path, bool check)
     var totalChanged = 0;
     var sw = System.Diagnostics.Stopwatch.StartNew();
 
-    foreach (var file in files)
+    void ProcessOne(string file)
     {
         var source = File.ReadAllText(file);
         var formatted = formatter.Format(source);
@@ -789,7 +969,7 @@ static int HandleFmtSqf(string path, bool check)
             totalChanged++;
             if (check)
             {
-                Console.WriteLine($"{file}: would reformat");
+                AnsiConsole.MarkupLine($"[yellow]{file}: would reformat[/]");
             }
             else
             {
@@ -797,17 +977,39 @@ static int HandleFmtSqf(string path, bool check)
             }
         }
     }
+
+    if (files.Length > 1)
+    {
+        AnsiConsole.Progress()
+            .Start(ctx =>
+            {
+                var task = ctx.AddTask($"Formatting {files.Length} SQF files...", new ProgressTaskSettings { MaxValue = files.Length });
+                foreach (var file in files)
+                {
+                    ProcessOne(file);
+                    task.Increment(1);
+                }
+            });
+    }
+    else
+    {
+        foreach (var file in files) ProcessOne(file);
+    }
     sw.Stop();
 
     if (check)
     {
-        var verb = anyChanged ? "some would be reformatted" : "all files are clean";
-        Console.WriteLine($"\n{files.Length} file(s) checked, {totalChanged} would reformat in {sw.ElapsedMilliseconds / 1000.0:F1}s.");
+        if (anyChanged)
+            AnsiConsole.MarkupLine($"\n[red]{files.Length} file(s) checked, {totalChanged} would reformat in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+        else
+            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) checked, all files are clean in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
     }
     else
     {
-        var verb = anyChanged ? "reformatted" : "all clean";
-        Console.WriteLine($"\n{files.Length} file(s) processed, {totalChanged} {verb} in {sw.ElapsedMilliseconds / 1000.0:F1}s.");
+        if (anyChanged)
+            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) processed, {totalChanged} reformatted in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+        else
+            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) processed, all clean in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
     }
     return anyChanged ? 1 : 0;
 }
@@ -818,5 +1020,5 @@ static void HandleConfigSerialize(string path, FileInfo output)
     var config = parser.ParseFile(path);
     using var stream = File.Create(output.FullName);
     ConfigSerializer.Serialize(config, stream);
-    Console.WriteLine($"Serialized config to {output.FullName}");
+    AnsiConsole.MarkupLine($"[green]Serialized config to {output.FullName}[/]");
 }

@@ -19,6 +19,7 @@
     <ProjectReference Include="..\BIS.Core\BIS.Core.csproj" />
     <ProjectReference Include="..\BIS.Stringtable\BIS.Stringtable.csproj" />
     <ProjectReference Include="..\BIS.SQF\BIS.SQF.csproj" />
+    <ProjectReference Include="..\BIS.PBO.Deobfuscator\BIS.PBO.Deobfuscator.csproj" />
   </ItemGroup>
 
 </Project>

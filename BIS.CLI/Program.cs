@@ -6,9 +6,14 @@ using System.Linq;
 using System.Text.Json;
 using BIS.Core.Config;
 using BIS.P3D;
+using BIS.P3D.Conversion;
+using BIS.P3D.Export;
+using BIS.PBO.Deobfuscator.Format;
 using BIS.SQF;
 using BIS.Stringtable;
 using BIS.PBO;
+using BIS.PBO.Deobfuscator;
+using BIS.PBO.Deobfuscator.Profiles.Specialized;
 using Spectre.Console;
 
 var root = new RootCommand("BIS file format CLI tool")
@@ -32,6 +37,11 @@ var root = new RootCommand("BIS file format CLI tool")
         {
             new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
         },
+        new Command("export", "Export a P3D model to Blender .blend format")
+        {
+            new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
+            new Option<DirectoryInfo?>(["--output", "-o"], "Output directory for .blend file"),
+        },
     },
     new Command("paa", "PAA texture operations")
     {
@@ -49,11 +59,16 @@ var root = new RootCommand("BIS file format CLI tool")
         new Command("list", "List PBO contents")
         {
             new Argument<FileInfo>("path", "Path to .pbo file").ExistingOnly(),
+            new Option<bool>(["--raw", "-r"], "Show original (un-deobfuscated) filenames"),
         },
         new Command("extract", "Extract PBO contents")
         {
             new Argument<FileInfo>("path", "Path to .pbo file").ExistingOnly(),
             new Option<DirectoryInfo?>(["--output-dir", "-o"], "Output directory"),
+            new Option<bool>(["--raw", "-r"], "Extract with original (un-deobfuscated) filenames"),
+            new Option<bool>(["--match-textures", "-m"], "After extraction, match orphan .paa files against known textures by pixel content"),
+            new Option<bool>(["--fuzzy-match", "-fm"], () => true, "After extraction and exact-match, match orphan .paa files against known textures by structural similarity (same layout, different colors) [default: on]"),
+            new Option<bool>(["--export-blender", "-b"], "Export models as Blender scripts with PNG textures alongside extracted files"),
         },
         new Command("pack", "Pack a directory into a PBO file")
         {
@@ -133,10 +148,11 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "p3d info":         HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output")); break;
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "pbo extract":      HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir")); break;
+                    case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
+                    case "pbo extract":      HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir"), GetOptVal<bool>(sub, parse, "--raw"), GetOptVal<bool>(sub, parse, "--match-textures"), GetOptVal<bool>(sub, parse, "--export-blender"), GetOptVal<bool>(sub, parse, "--fuzzy-match")); break;
                     case "pbo pack":         HandlePBOPack(GetDirArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output"), GetOptVal<string?>(sub, parse, "--prefix"), GetOptVal<bool>(sub, parse, "--compress")); break;
                     case "config serialize": HandleConfigSerialize(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output")); break;
                     case "lint config":
@@ -855,6 +871,18 @@ static void HandleP3DRoundtrip(string path)
     }
 }
 
+static void HandleP3DExport(string path, DirectoryInfo? outputDir)
+{
+    string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
+    AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
+    var task = BlenderHelper.ExportSingleAsync(path, outDir);
+    bool ok = task.GetAwaiter().GetResult();
+    if (ok)
+        AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");
+    else
+        AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
+}
+
 static void HandlePAAAnalyze(string path)
 {
     var analysis = BIS.PAA.PaaAnalyzer.Analyze(path);
@@ -878,31 +906,364 @@ static void HandlePAASuggest(string path)
         AnsiConsole.MarkupLine($"Notes: {suggestion.Notes}");
 }
 
-static void HandlePBOList(string path)
+static void HandlePBOList(string path, bool raw)
 {
     var pbo = new BIS.PBO.PBO(path);
     AnsiConsole.MarkupLine($"File: [blue]{Path.GetFileName(path)}[/]");
     AnsiConsole.MarkupLine($"Entries: {pbo.Files.Count}");
 
-    long totalSize = 0;
-    foreach (var entry in pbo.Files)
+    if (raw)
     {
-        int size = entry.Size;
-        totalSize += size;
-        string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
-        AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
+        long totalSize = 0;
+        foreach (var entry in pbo.Files)
+        {
+            int size = entry.Size;
+            totalSize += size;
+            string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
+            AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
+        }
+        AnsiConsole.MarkupLine($"Total: {totalSize} bytes");
+        return;
     }
-    AnsiConsole.MarkupLine($"Total: {totalSize} bytes");
+
+    var deobfuscator = new PboDeobfuscator();
+    var result = deobfuscator.Process(pbo);
+
+    if (result.IsObfuscated)
+        AnsiConsole.MarkupLine($"[yellow]Deobfuscation:[/] {result.MatchedProfile}");
+    if (result.FilteredOut.Count > 0)
+        AnsiConsole.MarkupLine($"[grey]Decoy/stub entries hidden:[/] {result.FilteredOut.Count}");
+
+    long totalSizeDeob = 0;
+    for (int i = 0; i < pbo.Files.Count; i++)
+    {
+        if (result.FilteredOut.Contains(i))
+            continue;
+
+        var entry = pbo.Files[i];
+        int size = entry.Size;
+        totalSizeDeob += size;
+
+        bool recovered = result.RecoveredNames.TryGetValue(i, out var recoveredName);
+        string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
+        string recoveryTag = recovered ? " [green]✔[/]" : "";
+
+        if (recovered)
+        {
+            var originalName = entry.FileName;
+            AnsiConsole.MarkupLine($"  {recoveredName,-40} {size,8} bytes{packInfo}{recoveryTag}");
+            if (originalName != recoveredName)
+                AnsiConsole.MarkupLine($"    [grey](was: {originalName})[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
+        }
+    }
+    AnsiConsole.MarkupLine($"Total: {totalSizeDeob} bytes");
+    if (result.FilteredOut.Count > 0)
+        AnsiConsole.MarkupLine($"[grey]({result.FilteredOut.Count} decoy/stub entries skipped)[/]");
 }
 
-static void HandlePBOExtract(string path, DirectoryInfo? outputDir)
+static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bool matchTextures, bool exportBlender, bool fuzzyMatch)
 {
     var outDir = outputDir?.FullName ?? Path.GetFileNameWithoutExtension(path);
-    Directory.CreateDirectory(outDir);
-
     var pbo = new BIS.PBO.PBO(path);
-    pbo.ExtractFiles(pbo.Files, outDir);
-    AnsiConsole.MarkupLine($"[green]Extracted {pbo.Files.Count} files to {outDir}[/]");
+
+    if (raw)
+    {
+        Directory.CreateDirectory(outDir);
+        pbo.ExtractFiles(pbo.Files, outDir);
+        AnsiConsole.MarkupLine($"[green]Extracted {pbo.Files.Count} files to {outDir}[/]");
+        return;
+    }
+
+    var deobfuscator = new PboDeobfuscator();
+    var result = deobfuscator.Process(pbo);
+
+    // Apply pixel-content orphan matching BEFORE extraction so matched
+    // names flow into the pathMap and reference updaters.
+    if (matchTextures)
+    {
+        var applied = PaaContentMatcher.ApplyMatches(pbo, result);
+        if (applied.Count > 0)
+        {
+            AnsiConsole.MarkupLine($"  [green]Pixel-content matching: {applied.Count} orphan texture(s) auto-renamed[/]");
+            ShowAppliedTextureMatches(pbo, applied);
+        }
+        else
+        {
+            int orphanCount = CountOrphanPaas(pbo, result);
+            AnsiConsole.MarkupLine($"  [yellow]No pixel-content matches for {orphanCount} orphan texture(s).[/]");
+        }
+    }
+
+    // Apply fuzzy structural PAA matching — after exact-match so orphans
+    // that differ in color palette but share UV layout can still be matched.
+    if (fuzzyMatch)
+    {
+        var fuzzyApplied = PaaContentMatcher.ApplyFuzzyMatches(pbo, result);
+        if (fuzzyApplied.Count > 0)
+        {
+            AnsiConsole.MarkupLine($"  [green]Fuzzy texture matching: {fuzzyApplied.Count} orphan texture(s) auto-renamed[/]");
+            ShowAppliedTextureMatches(pbo, fuzzyApplied);
+        }
+        else
+        {
+            int orphanCount = CountOrphanPaas(pbo, result);
+            AnsiConsole.MarkupLine($"  [yellow]No fuzzy matches for {orphanCount} remaining orphan texture(s).[/]");
+        }
+    }
+
+    // Apply RVMAT content matching — after texture matching so known
+    // texture names are available for reference inference.
+    var rvmatApplied = RvmatContentMatcher.ApplyMatches(pbo, result);
+    if (rvmatApplied.Count > 0)
+        AnsiConsole.MarkupLine($"  [green]RVMAT content matching: {rvmatApplied.Count} orphan material(s) auto-renamed[/]");
+
+    int extracted = DeobfuscatedExtract(pbo, result, outDir, out var pathMap);
+    AnsiConsole.MarkupLine($"[green]Extracted {extracted} files to {outDir} (deobfuscated)[/]");
+
+    // ─── Blender export (PAA→PNG + batch import → .blend) ───
+    if (exportBlender)
+    {
+        // Convert PAAs to PNGs for fast Blender loading (a3ob.import_paa is ~4.5s per texture)
+        string textureDir = Path.Combine(outDir, "_textures");
+        int pngCount = BlenderExport.ExportAll(outDir, textureDir);
+        if (pngCount > 0)
+            AnsiConsole.MarkupLine($"  Converted {pngCount} PAA texture(s) to PNG for Blender");
+
+        string blenderDir = Path.Combine(outDir, "_blender");
+        var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir, textureDir);
+        int blenderResult = blenderTask.GetAwaiter().GetResult();
+        AnsiConsole.MarkupLine($"[green]Blender export complete in {blenderDir}[/]");
+    }
+}
+
+/// <summary>
+/// Extracts PBO files applying deobfuscated names and updating internal
+/// references (config.bin model= paths, P3D textures, RVMAT materials).
+/// Decoy/stub entries are skipped entirely.
+/// </summary>
+static int DeobfuscatedExtract(BIS.PBO.PBO pbo, DeobfuscationResult result, string outDir, out Dictionary<string, string> pathMap)
+{
+    if (!result.IsObfuscated && result.RecoveredNames.Count == 0)
+    {
+        // Clean PBO — extract as-is
+        Directory.CreateDirectory(outDir);
+        pbo.ExtractFiles(pbo.Files, outDir);
+        pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        return pbo.Files.Count;
+    }
+
+    if (result.IsObfuscated)
+        AnsiConsole.MarkupLine($"  [yellow]Detected: {result.MatchedProfile}[/]");
+
+    // Build path map: RawFileName (preserved obfuscated path) → output name
+    // Recovered entries get their recovered names; non-recovered entries get
+    // their sanitized names so reference updaters can resolve all paths.
+    pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    var recoveredIndices = new HashSet<int>(result.RecoveredNames.Keys);
+    foreach (var kvp in result.RecoveredNames)
+    {
+        var orig = pbo.Files[kvp.Key].RawFileName.Replace('\\', '/');
+        pathMap[orig] = kvp.Value.Replace('\\', '/');
+    }
+    for (int i = 0; i < pbo.Files.Count; i++)
+    {
+        if (result.FilteredOut.Contains(i)) continue;
+        if (recoveredIndices.Contains(i)) continue;
+        var orig = pbo.Files[i].RawFileName.Replace('\\', '/');
+        var final = pbo.Files[i].FileName.Replace('\\', '/');
+        if (!pathMap.ContainsKey(orig))
+            pathMap[orig] = final;
+    }
+
+    // Run reference updaters on each entry
+    var modifiedData = new Dictionary<int, byte[]>();
+    var updaters = new List<IReferenceUpdater>
+    {
+        new P3DTextureReferenceUpdater(),
+        new RVMATReferenceUpdater(),
+        new ConfigReferenceUpdater()
+    };
+
+    for (int i = 0; i < pbo.Files.Count; i++)
+    {
+        if (result.FilteredOut.Contains(i)) continue;
+        foreach (var updater in updaters)
+        {
+            if (modifiedData.ContainsKey(i)) break;
+            var data = updater.UpdateReferences(pbo.Files[i], pathMap);
+            if (data != null)
+            {
+                modifiedData[i] = data;
+                break;
+            }
+        }
+    }
+
+    int extracted = 0;
+    Directory.CreateDirectory(outDir);
+    for (int i = 0; i < pbo.Files.Count; i++)
+    {
+        if (result.FilteredOut.Contains(i)) continue;
+        var entry = pbo.Files[i];
+        string entryName = result.RecoveredNames.TryGetValue(i, out var recoveredName)
+            ? recoveredName.Replace('\\', '/').ToLowerInvariant()
+            : entry.FileName.Replace('\\', '/').ToLowerInvariant();
+
+        // Detect files that need format conversion for pack-ready output
+        bool isConfigBin = entryName.Equals("config.bin", StringComparison.OrdinalIgnoreCase);
+        bool isTexHeaders = entryName.Equals("texheaders.bin", StringComparison.OrdinalIgnoreCase);
+        bool isP3D = entryName.EndsWith(".p3d", StringComparison.OrdinalIgnoreCase);
+
+        // Rename files that get converted
+        string outputName = entryName;
+        if (isConfigBin) outputName = "config.cpp";
+        // .p3d keeps its extension — game reads both ODOL and MLOD formats
+
+        var path = Path.Combine(outDir, outputName);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+
+        if (modifiedData.TryGetValue(i, out var data))
+        {
+            // Reference updater modified this file — apply format conversion if needed
+            if (isConfigBin)
+            {
+                var configText = DerapifyConfig(data);
+                File.WriteAllText(path, configText);
+            }
+            else if (isP3D)
+            {
+                var mlodData = ConvertP3DToMLOD(data);
+                File.WriteAllBytes(path, mlodData ?? data);
+            }
+            else
+            {
+                File.WriteAllBytes(path, data);
+            }
+        }
+        else
+        {
+            // File was not modified — check if it still needs format conversion
+            if (isTexHeaders)
+            {
+                // texHeaders.bin is a generated cache — HEMTT regenerates it from .paa files.
+                // Skip it; the build tool will generate a fresh one.
+                continue;
+            }
+            else if (isP3D)
+            {
+                using var src = entry.OpenRead();
+                using var ms = new MemoryStream();
+                src.CopyTo(ms);
+                var mlodData = ConvertP3DToMLOD(ms.ToArray());
+                File.WriteAllBytes(path, mlodData ?? ms.ToArray());
+            }
+            else
+            {
+                using var source = entry.OpenRead();
+                using var target = File.Create(path);
+                source.CopyTo(target);
+            }
+        }
+
+        extracted++;
+    }
+
+    if (result.FilteredOut.Count > 0)
+        AnsiConsole.MarkupLine($"  [grey]({result.FilteredOut.Count} decoy/stub entries skipped)[/]");
+
+    return extracted;
+}
+
+static int CountOrphanPaas(BIS.PBO.PBO pbo, DeobfuscationResult result)
+{
+    int count = 0;
+    for (int i = 0; i < pbo.Files.Count; i++)
+    {
+        if (result.FilteredOut.Contains(i)) continue;
+        if (result.RecoveredNames.ContainsKey(i)) continue;
+        if (pbo.Files[i].FileName.EndsWith(".paa", StringComparison.OrdinalIgnoreCase))
+            count++;
+    }
+    return count;
+}
+
+static void ShowAppliedTextureMatches(BIS.PBO.PBO pbo, Dictionary<int, string> applied)
+{
+    var table = new Table();
+    table.AddColumn("Orphan");
+    table.AddColumn("Auto-Renamed To");
+
+    foreach (var kvp in applied)
+    {
+        var orphanName = pbo.Files[kvp.Key].FileName;
+        table.AddRow(
+            $"[grey]{orphanName}[/]",
+            $"[green]{kvp.Value}[/]");
+    }
+
+    AnsiConsole.Write(table);
+}
+
+static string DerapifyConfig(byte[] configBinData)
+{
+    using var ms = new MemoryStream(configBinData);
+    var config = new ParamFile(ms);
+    var text = ConfigSerializer.SerializeToConfigText(config);
+    return NormalizeConfigPaths(text);
+}
+
+/// <summary>
+/// Normalizes file path strings in generated config.cpp to lowercase
+/// so they match the extracted filesystem (all deobfuscated paths are lowercase).
+/// Affects paths ending with .paa, .p3d, .rvmat extensions.
+/// </summary>
+static string NormalizeConfigPaths(string configText)
+{
+    var pathExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".paa", ".p3d", ".rvmat", ".bin"
+    };
+
+    return System.Text.RegularExpressions.Regex.Replace(
+        configText,
+        "\"[^\"]+\"",
+        m =>
+        {
+            var val = m.Value;
+            var inner = val.Trim('"');
+            var ext = Path.GetExtension(inner);
+            if (!string.IsNullOrEmpty(ext) && pathExtensions.Contains(ext))
+            {
+                var normalized = inner.Replace('\\', '/').ToLowerInvariant();
+                return "\"" + normalized + "\"";
+            }
+            return val;
+        });
+}
+
+static byte[]? ConvertP3DToMLOD(byte[] p3dData)
+{
+    try
+    {
+        using var ms = new MemoryStream(p3dData);
+        var p3d = new P3D(ms);
+        if (p3d.IsODOLFormat)
+        {
+            var mlod = ODOL2MLOD.Convert(p3d.ODOL);
+            using var outMs = new MemoryStream();
+            mlod.WriteToStream(outMs);
+            return outMs.ToArray();
+        }
+    }
+    catch
+    {
+        // Conversion failed — caller falls back to original data
+    }
+    return null;
 }
 
 static void HandlePBOPack(string sourceDir, FileInfo? output, string? prefix, bool compress)

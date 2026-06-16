@@ -702,15 +702,15 @@ namespace BIS.PBO.Test.Format
                     {
                         loaded.ExtractFiles(loaded.Files, outDir);
 
-                        Assert.True(File.Exists(Path.Combine(outDir, @"addons\weapons\config.cpp")));
-                        Assert.True(File.Exists(Path.Combine(outDir, @"addons\weapons\data\m16.paa")));
-                        Assert.True(File.Exists(Path.Combine(outDir, @"addons\vehicles\config.cpp")));
-                        Assert.True(File.Exists(Path.Combine(outDir, @"addons\vehicles\scripts\init.sqf")));
+                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
+                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "data", "m16.paa")));
+                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
+                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "scripts", "init.sqf")));
 
                         Assert.Equal("class Weapons {};",
-                            File.ReadAllText(Path.Combine(outDir, @"addons\weapons\config.cpp")));
+                            File.ReadAllText(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
                         Assert.Equal("class Vehicles {};",
-                            File.ReadAllText(Path.Combine(outDir, @"addons\vehicles\config.cpp")));
+                            File.ReadAllText(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
                     }
                     finally
                     {

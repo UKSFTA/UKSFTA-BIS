@@ -15,6 +15,13 @@ using BIS.Stringtable;
 using BIS.PBO;
 using BIS.PBO.Deobfuscator;
 using BIS.PBO.Deobfuscator.Profiles.Specialized;
+using BIS.WRP;
+using BIS.RTM;
+using BIS.PAK;
+using BIS.PAK.Models;
+using BIS.ALB;
+using BIS.EBO;
+using BIS.Core.Streams;
 using Spectre.Console;
 
 var root = new RootCommand("BIS file format CLI tool")
@@ -98,6 +105,42 @@ var root = new RootCommand("BIS file format CLI tool")
             new Option<FileInfo?>(["--output", "-o"], "Output file path") { IsRequired = true },
         },
     },
+    new Command("wrp", "WRP terrain operations")
+    {
+        new Command("info", "Show WRP terrain info")
+        {
+            new Argument<FileInfo>("path", "Path to .wrp file").ExistingOnly(),
+        },
+    },
+    new Command("rtm", "RTM animation operations")
+    {
+        new Command("info", "Show RTM animation info")
+        {
+            new Argument<FileInfo>("path", "Path to .rtm file").ExistingOnly(),
+        },
+    },
+    new Command("pak", "PAK archive operations")
+    {
+        new Command("list", "List PAK archive contents")
+        {
+            new Argument<FileInfo>("path", "Path to .pak file").ExistingOnly(),
+        },
+    },
+    new Command("ebo", "EBO encrypted PBO operations")
+    {
+        new Command("info", "Show EBO file info")
+        {
+            new Argument<FileInfo>("path", "Path to .ebo file").ExistingOnly(),
+            new Option<string?>(["--rc4-key", "-k"], "RC4 decryption key (hex string)"),
+        },
+    },
+    new Command("alb", "ALB album operations")
+    {
+        new Command("info", "Show ALB album info")
+        {
+            new Argument<FileInfo>("path", "Path to .alb file").ExistingOnly(),
+        },
+    },
     new Command("lint", "Lint and diagnostic operations")
     {
         new Command("config", "Lint config files (.cpp/.hpp) — accepts files or directories")
@@ -156,17 +199,17 @@ foreach (var cmd in root.Children.OfType<Command>())
                 var name = $"{cmd.Name} {sub.Name}";
                 switch (name)
                 {
-                    case "p3d validate":     HandleP3DValidate(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d info":         HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
-                    case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d export":       HandleP3DExport(GetPathArg(sub.Arguments.First(), parse), GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
-                    case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output"), GetOptVal<DirectoryInfo?>(sub, parse, "--texture-dir"), GetOptVal<string?>(sub, parse, "--lod")); break;
-                    case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
-                    case "pbo extract":      HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir"), GetOptVal<bool>(sub, parse, "--raw"), GetOptVal<bool>(sub, parse, "--match-textures"), GetOptVal<bool>(sub, parse, "--export-blender"), GetOptVal<bool>(sub, parse, "--fuzzy-match"), GetOptVal<FileInfo?>(sub, parse, "--retx"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
-                    case "pbo pack":         HandlePBOPack(GetDirArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output"), GetOptVal<string?>(sub, parse, "--prefix"), GetOptVal<bool>(sub, parse, "--compress")); break;
+                    case "p3d validate": HandleP3DValidate(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "p3d info": HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "p3d convert": HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
+                    case "p3d roundtrip": HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "p3d export": HandleP3DExport(GetPathArg(sub.Arguments.First(), parse), GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
+                    case "p3d retx": HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output"), GetOptVal<DirectoryInfo?>(sub, parse, "--texture-dir"), GetOptVal<string?>(sub, parse, "--lod")); break;
+                    case "paa analyze": HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "paa suggest": HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "pbo list": HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
+                    case "pbo extract": HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir"), GetOptVal<bool>(sub, parse, "--raw"), GetOptVal<bool>(sub, parse, "--match-textures"), GetOptVal<bool>(sub, parse, "--export-blender"), GetOptVal<bool>(sub, parse, "--fuzzy-match"), GetOptVal<FileInfo?>(sub, parse, "--retx"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
+                    case "pbo pack": HandlePBOPack(GetDirArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output"), GetOptVal<string?>(sub, parse, "--prefix"), GetOptVal<bool>(sub, parse, "--compress")); break;
                     case "config serialize": HandleConfigSerialize(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output")); break;
                     case "lint config":
                         ctx.ExitCode = LintConfigBatch(GetPathArg(sub.Arguments.First(), parse),
@@ -200,6 +243,11 @@ foreach (var cmd in root.Children.OfType<Command>())
                         ctx.ExitCode = HandleFmtSqf(GetPathArg(sub.Arguments.First(), parse),
                             GetOptVal<bool>(sub, parse, "--check"));
                         break;
+                    case "wrp info": HandleWRPInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "rtm info": HandleRTMInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "pak list": HandlePAKList(GetFileArg(sub.Arguments.First(), parse).FullName); break;
+                    case "ebo info": HandleEBOInfo(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<string?>(sub, parse, "--rc4-key")); break;
+                    case "alb info": HandleALBInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                 }
             }
             catch (Exception ex)
@@ -1560,5 +1608,110 @@ static void HandleConfigSerialize(string path, FileInfo output)
     {
         t.AddRow(new Markup($"  [bold grey]Source:[/]  {Terminal.MarkupEncode(path)}"));
         t.AddRow(new Markup($"  [bold grey]Output:[/] [green]{Terminal.MarkupEncode(output.FullName)}[/]"));
+    });
+}
+
+// ─── New format handlers (wrp/rtm/pak/ebo/alb) ───
+
+static void HandleWRPInfo(string path)
+{
+    var wrp = new AnyWrp();
+    wrp.Read(new BinaryReaderEx(File.OpenRead(path)));
+
+    Terminal.Card("wrp info", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]         {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]LandRange:[/]    {wrp.LandRangeX} × {wrp.LandRangeY}"));
+        t.AddRow(new Markup($"  [bold grey]TerrainRange:[/] {wrp.TerrainRangeX} × {wrp.TerrainRangeY}"));
+        t.AddRow(new Markup($"  [bold grey]CellSize:[/]     {wrp.CellSize}"));
+        t.AddRow(new Markup($"  [bold grey]MatNames:[/]     {wrp.MatNames.Length}"));
+        t.AddRow(new Markup($"  [bold grey]Objects:[/]      {Terminal.FormatCount(wrp.ObjectsCount)}"));
+    });
+}
+
+static void HandleRTMInfo(string path)
+{
+    var rtm = new RTM(path);
+    var duration = rtm.FrameTimes.Length > 0 ? rtm.FrameTimes[^1] : 0f;
+
+    Terminal.Card("rtm info", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]         {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Bones:[/]        {rtm.BoneNames.Length}"));
+        t.AddRow(new Markup($"  [bold grey]Frames:[/]       {rtm.FrameTimes.Length}"));
+        t.AddRow(new Markup($"  [bold grey]Duration:[/]     {duration:F3}s"));
+        t.AddRow(new Markup($"  [bold grey]Displacement:[/] X:{rtm.Displacement.X:F3} Y:{rtm.Displacement.Y:F3} Z:{rtm.Displacement.Z:F3}"));
+    });
+}
+
+static void HandlePAKList(string path)
+{
+    using var pak = PakFile.Open(path);
+
+    Terminal.Card("pak list", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]     {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Version:[/]  {pak.Version}"));
+        t.AddRow(new Markup($"  [bold grey]FileSize:[/] {Terminal.FormatBytes(pak.FileSize)}"));
+
+        var entries = pak.Entries.Where(e => !e.IsDirectory).ToList();
+        var dirs = pak.Entries.Where(e => e.IsDirectory).ToList();
+        t.AddRow(new Markup($"  [bold grey]Entries:[/]  {entries.Count} files, {dirs.Count} directories"));
+
+        t.AddRow(new Markup(""));
+        Terminal.Section("Contents");
+        t.AddRow(new Markup(""));
+        var fileTable = new Table().Border(TableBorder.None).HideHeaders()
+            .AddColumn("")
+            .AddColumn("Name")
+            .AddColumn("Size")
+            .AddColumn("Compressed")
+            .AddColumn("Type");
+        foreach (var entry in entries)
+        {
+            fileTable.AddRow(
+                new Markup("  "),
+                new Markup(Terminal.MarkupEncode(entry.FullPath)),
+                new Markup(Terminal.FormatBytes(entry.OriginalSize)),
+                new Markup(Terminal.FormatBytes(entry.CompressedSize)),
+                new Markup(entry.CompressionType == PakCompressionType.Zlib ? "zlib" : "none"));
+        }
+        t.AddRow(fileTable);
+    });
+}
+
+static void HandleEBOInfo(string path, string? rc4Key)
+{
+    EBO ebo;
+    bool keyProvided = rc4Key != null;
+    if (rc4Key != null)
+    {
+        var keyBytes = Convert.FromHexString(rc4Key);
+        ebo = new EBO(path, keyBytes);
+    }
+    else
+    {
+        ebo = new EBO(path);
+    }
+
+    Terminal.Card("ebo info", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]      {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Entries:[/]   {ebo.Files.Count}"));
+        t.AddRow(new Markup($"  [bold grey]Encrypted:[/] {(keyProvided ? "[green]yes[/]" : "[yellow]yes (no key)[/]")}"));
+        t.AddRow(new Markup($"  [bold grey]RC4 key:[/]   {(keyProvided ? "[green]provided[/]" : "[grey]none[/]")}"));
+    });
+}
+
+static void HandleALBInfo(string path)
+{
+    var alb = new ALB1(new BinaryReaderEx(File.OpenRead(path)));
+
+    Terminal.Card("alb info", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]    {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Tags:[/]    {alb.TagsCount}"));
+        t.AddRow(new Markup($"  [bold grey]Classes:[/] {alb.ClassesCount}"));
+        t.AddRow(new Markup($"  [bold grey]Entries:[/] {alb.EntriesCount}"));
     });
 }

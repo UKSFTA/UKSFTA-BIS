@@ -170,7 +170,7 @@ namespace BIS.PBO.Deobfuscator
                 // Use recovered name if available (from profile deobfuscation)
                 if (result.RecoveredNames.TryGetValue(i, out var recoveredName))
                 {
-                    finalName = recoveredName;
+                    finalName = recoveredName.ToLowerInvariant();
                 }
                 // If the original entry was NOT stripped, keep as-is
                 else if (!origFile.StartsWith("_") && !origFile.StartsWith("."))

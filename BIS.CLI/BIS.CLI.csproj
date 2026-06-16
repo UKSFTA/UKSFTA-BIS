@@ -12,11 +12,6 @@
     <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="*" />
   </ItemGroup>
 
-  <!-- Remove duplicate-typed DLL before ILRepack merge -->
-  <Target Name="RemoveDuplicateAnsiDll" BeforeTargets="ILRepack" Condition="$(Configuration.Contains('Release'))">
-    <Delete Files="$(OutputPath)Spectre.Console.Ansi.dll" />
-  </Target>
-
   <ItemGroup>
     <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
     <ProjectReference Include="..\BIS.PAA\BIS.PAA.csproj" />

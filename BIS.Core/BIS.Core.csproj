@@ -5,4 +5,8 @@
     <Description>Core stream utilities, math, compression, and configuration parsing for Bohemia Interactive file formats</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Spectre.Console" Version="*" />
+  </ItemGroup>
+
 </Project>

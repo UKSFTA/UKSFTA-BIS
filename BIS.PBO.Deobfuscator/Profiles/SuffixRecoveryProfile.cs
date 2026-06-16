@@ -1106,10 +1106,11 @@ namespace BIS.PBO.Deobfuscator.Profiles
                 if (!string.IsNullOrEmpty(prefix))
                 {
                     var prefixClean = prefix.TrimEnd('/');
-                    // Only strip PBO prefix if followed by underscore to prevent
-                    // partial-word matches (e.g., prefix "avs" should not match
-                    // class segment "avs_assault_vest" unless explicitly "avs_").
-                    if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrEmpty(prefixClean))
+                        continue;
+                    if (normalized.StartsWith(prefixClean + "/", StringComparison.OrdinalIgnoreCase))
+                        normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
+                    else if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
                         normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
                 }
 
@@ -1312,7 +1313,11 @@ namespace BIS.PBO.Deobfuscator.Profiles
                 if (!string.IsNullOrEmpty(prefix))
                 {
                     var prefixClean = prefix.TrimEnd('/');
-                    if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrEmpty(prefixClean))
+                        continue;
+                    if (normalized.StartsWith(prefixClean + "/", StringComparison.OrdinalIgnoreCase))
+                        normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
+                    else if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
                         normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
                 }
 

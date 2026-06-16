@@ -353,9 +353,12 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
 
             var result = new SuffixRecoveryProfile().Deobfuscate(pbo);
 
-            // No recovery: the suffix file's dir "data/abav" doesn't contain class words
-            // (avs/assault/vest), and config doesn't have model=/image= properties.
-            Assert.Equal(0, result.Stats["Recovered"]);
+            // KnownPath cross-referencing recovers _co.paa by matching directory
+            // (data/abav) + suffix (_co) + extension (.paa). The config path
+            // "avs_assault_vest_co.paa" is in knownPaths before the RVMAT path,
+            // so it wins priority.
+            Assert.Equal(1, result.Stats["Recovered"]);
+            Assert.Equal("data/abav/avs_assault_vest_co.paa", result.RecoveredNames[2]);
         }
 
         // ─── Test: Profile name ───

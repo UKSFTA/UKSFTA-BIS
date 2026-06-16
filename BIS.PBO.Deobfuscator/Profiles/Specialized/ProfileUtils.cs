@@ -219,10 +219,13 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                 if (!string.IsNullOrEmpty(prefix))
                 {
                     var prefixClean = prefix.TrimEnd('/');
-                    // Only strip PBO prefix if followed by underscore to prevent
-                    // partial-word matches (e.g., prefix "avs" should not match
-                    // "avs_assault_vest" unless explicitly "avs_").
-                    if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrEmpty(prefixClean))
+                        continue;
+                    if (normalized.StartsWith(prefixClean + "/", StringComparison.OrdinalIgnoreCase))
+                        normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
+                    // Strip prefix if followed by '_' to prevent partial-word matches
+                    // (e.g., prefix "avs" should not match "avs_assault_vest")
+                    else if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
                         normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
                 }
 

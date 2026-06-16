@@ -41,6 +41,13 @@ var root = new RootCommand("BIS file format CLI tool")
         {
             new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
             new Option<DirectoryInfo?>(["--output", "-o"], "Output directory for .blend file"),
+            new Option<bool>(["--convert-paa"], "Pre-convert PAA textures to PNG (armaio handles in-Blender by default)"),
+        },
+        new Command("retx", "Re-texture a P3D model via Blender")
+        {
+            new Argument<FileInfo>("path", "Path to .p3d file to re-texture").ExistingOnly(),
+            new Option<FileInfo>("--remap", "Path to JSON remap config file") { IsRequired = true },
+            new Option<FileInfo?>(["--output", "-o"], "Output .p3d path (default: overwrites input)"),
         },
     },
     new Command("paa", "PAA texture operations")
@@ -148,7 +155,8 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "p3d info":         HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output")); break;
+                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<bool>(sub, parse, "--convert-paa")); break;
+                    case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
@@ -871,16 +879,33 @@ static void HandleP3DRoundtrip(string path)
     }
 }
 
-static void HandleP3DExport(string path, DirectoryInfo? outputDir)
+static void HandleP3DExport(string path, DirectoryInfo? outputDir, bool convertPaa)
 {
     string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
     AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
-    var task = BlenderHelper.ExportSingleAsync(path, outDir);
+    var task = BlenderHelper.ExportSingleAsync(path, outDir, convertPaa);
     bool ok = task.GetAwaiter().GetResult();
     if (ok)
         AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");
     else
         AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
+}
+
+static void HandleP3DRetexture(string path, FileInfo remapFile, FileInfo? output)
+{
+    string outputPath = output?.FullName ?? path;
+    AnsiConsole.MarkupLine($"[blue]Re-texturing {Path.GetFileName(path)}...[/]");
+
+    string scriptPath = RetextureExport.GenerateRetextureScript(path, remapFile.FullName, outputPath);
+    AnsiConsole.MarkupLine($"  Generated script: [blue]{Path.GetFileName(scriptPath)}[/]");
+
+    string workingDir = Path.GetDirectoryName(outputPath) ?? ".";
+    var blenderHelperTask = BlenderHelper.RunScriptAsync(scriptPath, workingDir);
+    bool ok = blenderHelperTask.GetAwaiter().GetResult();
+    if (ok)
+        AnsiConsole.MarkupLine($"[green]Re-texturing complete: {outputPath}[/]");
+    else
+        AnsiConsole.MarkupLine($"[red]Re-texturing failed[/]");
 }
 
 static void HandlePAAAnalyze(string path)
@@ -1024,14 +1049,11 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
     int extracted = DeobfuscatedExtract(pbo, result, outDir, out var pathMap);
     AnsiConsole.MarkupLine($"[green]Extracted {extracted} files to {outDir} (deobfuscated)[/]");
 
-    // ─── Blender export (PAA→PNG + batch import → .blend) ───
+    // ─── Blender export (batch import via armaio → .blend) ───
     if (exportBlender)
     {
-        // Convert PAAs to PNGs for fast Blender loading (a3ob.import_paa is ~4.5s per texture)
-        string textureDir = Path.Combine(outDir, "_textures");
-        int pngCount = BlenderExport.ExportAll(outDir, textureDir);
-        if (pngCount > 0)
-            AnsiConsole.MarkupLine($"  Converted {pngCount} PAA texture(s) to PNG for Blender");
+        // PAA textures are decoded in-Blender via armaio (fast, no pre-conversion needed).
+        string? textureDir = null;
 
         string blenderDir = Path.Combine(outDir, "_blender");
         var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir, textureDir);

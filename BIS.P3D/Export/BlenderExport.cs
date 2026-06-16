@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BIS.Core;
 using BIS.Core.Config;
 using BIS.Core.Streams;
 using BIS.P3D.ODOL;
@@ -156,12 +157,12 @@ namespace BIS.P3D.Export
                     return p3dPath;
                 }
 
-                Console.WriteLine($"  Sanitized {name}: removed empty LODs -> {sanitizedPath}");
+                Terminal.Info($"Sanitized {name}: removed empty LODs -> {sanitizedPath}");
                 return sanitizedPath;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"  Warning: Failed to sanitize {p3dPath}: {ex.Message}. Using original.");
+                Terminal.Warning($"Failed to sanitize {p3dPath}: {ex.Message}. Using original.");
                 return p3dPath;
             }
         }
@@ -185,26 +186,26 @@ namespace BIS.P3D.Export
                 {
                     // ILevelOfDetail.NamedSelections has a Select((_, i) => lod.Faces[i]) bug in MLOD
                     var mlod = p3d.MLOD;
-                    if (mlod?.Lods == null) { Console.WriteLine($"[BIS sel_map] MLOD has no LODs"); return "None"; }
-                    Console.WriteLine($"[BIS sel_map] MLOD format, {mlod.Lods.Length} LODs");
+                    if (mlod?.Lods == null) { Terminal.Muted($"[BIS sel_map] MLOD has no LODs"); return "None"; }
+                    Terminal.Muted($"[BIS sel_map] MLOD format, {mlod.Lods.Length} LODs");
 
                     foreach (var lod in mlod.Lods.OrderByDescending(l => l.Resolution))
                     {
-                        Console.WriteLine($"[BIS sel_map]   LOD res={lod.Resolution}, faces={lod.Faces?.Length ?? 0}");
+                        Terminal.Muted($"[BIS sel_map]   LOD res={lod.Resolution}, faces={lod.Faces?.Length ?? 0}");
 
                         int allTaggs = lod.Taggs?.Count ?? 0;
                         var selTaggs = lod.Taggs?.OfType<MLOD.NamedSelectionTagg>().ToList();
-                        Console.WriteLine($"[BIS sel_map]     Total taggs: {allTaggs}, NamedSelection: {selTaggs?.Count ?? 0}");
+                        Terminal.Muted($"[BIS sel_map]     Total taggs: {allTaggs}, NamedSelection: {selTaggs?.Count ?? 0}");
                         if (selTaggs == null || selTaggs.Count == 0)
                         {
                             if (lod.Taggs != null)
                             {
                                 foreach (var t in lod.Taggs.Take(20))
-                                    Console.WriteLine($"[BIS sel_map]       Tagg: type={t.GetType().Name}, name='{t.Name}'");
+                                    Terminal.Muted($"[BIS sel_map]       Tagg: type={t.GetType().Name}, name='{t.Name}'");
                             }
                             continue;
                         }
-                        Console.WriteLine($"[BIS sel_map]     {selTaggs.Count} NamedSelection taggs");
+                        Terminal.Muted($"[BIS sel_map]     {selTaggs.Count} NamedSelection taggs");
 
                         foreach (var nst in selTaggs)
                         {
@@ -213,7 +214,7 @@ namespace BIS.P3D.Export
                             // byte array is membership bitmap: index=face idx, value=0=not selected, non-0=selected
                             int nonZeroFaces = nst.Faces?.Count(b => b != 0) ?? 0;
                             int nonZeroPoints = nst.Points?.Count(b => b != 0) ?? 0;
-                            Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}': non-zero faces={nonZeroFaces}, points={nonZeroPoints}, faceArrLen={nst.Faces?.Length ?? 0}, pointArrLen={nst.Points?.Length ?? 0}");
+                            Terminal.Muted($"[BIS sel_map]     NS '{nst.Name}': non-zero faces={nonZeroFaces}, points={nonZeroPoints}, faceArrLen={nst.Faces?.Length ?? 0}, pointArrLen={nst.Points?.Length ?? 0}");
 
                             var faceIndices = nst.Faces?.Select((b, i) => new { b, i })
                                 .Where(x => x.b != 0).Select(x => x.i).ToList();
@@ -232,26 +233,26 @@ namespace BIS.P3D.Export
                             if (materials.Count == 1)
                             {
                                 string key = materials[0].Replace("\\", "/").ToLowerInvariant();
-                                Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}' -> '{key}'");
+                                Terminal.Muted($"[BIS sel_map]     NS '{nst.Name}' -> '{key}'");
                                 if (!map.ContainsKey(key) || nst.Name.Length > map[key].Length)
                                     map[key] = nst.Name;
                             }
                             else
                             {
-                                Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}': multi-material ({materials.Count}) or no material");
+                                Terminal.Muted($"[BIS sel_map]     NS '{nst.Name}': multi-material ({materials.Count}) or no material");
                             }
                         }
                     }
                 }
                 else if (p3d.IsODOLFormat)
                 {
-                    Console.WriteLine($"[BIS sel_map] ODOL format");
+                    Terminal.Muted($"[BIS sel_map] ODOL format");
                     foreach (var lod in p3d.LODs.OrderByDescending(l => l.Resolution))
                     {
                         if (lod.Resolution < 1e8) continue;
                         var selections = lod.NamedSelections?.ToList();
                         if (selections == null || selections.Count == 0) continue;
-                        Console.WriteLine($"[BIS sel_map]   LOD res={lod.Resolution}: {selections.Count} selections");
+                        Terminal.Muted($"[BIS sel_map]   LOD res={lod.Resolution}: {selections.Count} selections");
 
                         foreach (var ns in selections)
                         {
@@ -266,11 +267,11 @@ namespace BIS.P3D.Export
                 }
                 else
                 {
-                    Console.WriteLine($"[BIS sel_map] Unknown P3D format");
+                    Terminal.Muted($"[BIS sel_map] Unknown P3D format");
                     return "None";
                 }
 
-                Console.WriteLine($"[BIS sel_map] Total entries: {map.Count}");
+                Terminal.Muted($"[BIS sel_map] Total entries: {map.Count}");
                 if (map.Count == 0) return "None";
 
                 var sb = new StringBuilder();
@@ -283,12 +284,12 @@ namespace BIS.P3D.Export
                     sb.Append($"r\"{kv.Key}\": \"{kv.Value}\"");
                 }
                 sb.Append('}');
-                Console.WriteLine($"[BIS sel_map] Result: {sb}");
+                Terminal.Muted($"[BIS sel_map] Result: {sb}");
                 return sb.ToString();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BIS sel_map] Exception: {ex.Message}");
+                Terminal.Muted($"[BIS sel_map] Exception: {ex.Message}");
                 return "None";
             }
         }
@@ -304,7 +305,7 @@ namespace BIS.P3D.Export
             {
                 if (!File.Exists(configCppPath))
                 {
-                    Console.WriteLine("[BIS cfg] config.cpp not found");
+                    Terminal.Muted("[BIS cfg] config.cpp not found");
                     return "None";
                 }
 
@@ -314,7 +315,7 @@ namespace BIS.P3D.Export
 
                 if (cfgVehicles == null)
                 {
-                    Console.WriteLine("[BIS cfg] CfgVehicles not found in config.cpp");
+                    Terminal.Muted("[BIS cfg] CfgVehicles not found in config.cpp");
                     return "None";
                 }
 
@@ -346,7 +347,7 @@ namespace BIS.P3D.Export
                     }
                 }
 
-                Console.WriteLine($"[BIS cfg] Scanned {classCount} CfgVehicles classes, matched {modelMap.Count} unique models");
+                Terminal.Muted($"[BIS cfg] Scanned {classCount} CfgVehicles classes, matched {modelMap.Count} unique models");
 
                 if (modelMap.Count == 0) return "None";
 
@@ -372,12 +373,12 @@ namespace BIS.P3D.Export
                 }
                 sb.Append('}');
 
-                Console.WriteLine($"[BIS cfg] Config data built for {modelMap.Count} models");
+                Terminal.Muted($"[BIS cfg] Config data built for {modelMap.Count} models");
                 return sb.ToString();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[BIS cfg] Failed to parse config.cpp: {ex.Message}");
+                Terminal.Muted($"[BIS cfg] Failed to parse config.cpp: {ex.Message}");
                 return "None";
             }
         }
@@ -429,7 +430,7 @@ namespace BIS.P3D.Export
             }
             sb.AppendLine("}");
 
-            Console.WriteLine($"  Built image_dict with {dict.Count} entries ({count} from extracted dir)");
+            Terminal.Info($"Built image_dict with {dict.Count} entries ({count} from extracted dir)");
             return sb.ToString();
         }
 
@@ -1079,7 +1080,7 @@ writer.WriteLine("import sys");
 
             if (validModels.Count == 0)
             {
-                Console.WriteLine("  No valid .p3d files found. Skipping Blender export.");
+                Terminal.Warning("No valid .p3d files found. Skipping Blender export.");
                 return new List<string>();
             }
 
@@ -1117,10 +1118,10 @@ writer.WriteLine("import sys");
                 var batchTuples = batch.Select(m => (m.Name, m.Path)).ToList();
                 string scriptPath = GenerateBatchScript(batchTuples, outputDir, imageDictLiteral, modelCfgPath, configDataLiteral);
                 batchScripts.Add(scriptPath);
-                Console.WriteLine($"  Generated batch script: {Path.GetFileName(scriptPath)} ({batch.Count} models)");
+                Terminal.Info($"Generated batch script: {Path.GetFileName(scriptPath)} ({batch.Count} models)");
             }
 
-            Console.WriteLine($"  Generated {batchScripts.Count} batch script(s) for {validModels.Count} model(s)");
+            Terminal.Info($"Generated {batchScripts.Count} batch script(s) for {validModels.Count} model(s)");
             return batchScripts;
         }
 

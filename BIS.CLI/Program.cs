@@ -48,6 +48,7 @@ var root = new RootCommand("BIS file format CLI tool")
             new Argument<FileInfo>("path", "Path to .p3d file to re-texture").ExistingOnly(),
             new Option<FileInfo>("--remap", "Path to JSON remap config file") { IsRequired = true },
             new Option<FileInfo?>(["--output", "-o"], "Output .p3d path (default: overwrites input)"),
+            new Option<DirectoryInfo?>(["--texture-dir", "-td"], "Load PAA textures from this directory into Blender via armaio"),
         },
     },
     new Command("paa", "PAA texture operations")
@@ -156,7 +157,7 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<bool>(sub, parse, "--convert-paa")); break;
-                    case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output")); break;
+                    case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output"), GetOptVal<DirectoryInfo?>(sub, parse, "--texture-dir")); break;
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
@@ -891,12 +892,13 @@ static void HandleP3DExport(string path, DirectoryInfo? outputDir, bool convertP
         AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
 }
 
-static void HandleP3DRetexture(string path, FileInfo remapFile, FileInfo? output)
+static void HandleP3DRetexture(string path, FileInfo remapFile, FileInfo? output, DirectoryInfo? textureDir = null)
 {
     string outputPath = output?.FullName ?? path;
+    string? texDir = textureDir?.FullName;
     AnsiConsole.MarkupLine($"[blue]Re-texturing {Path.GetFileName(path)}...[/]");
 
-    string scriptPath = RetextureExport.GenerateRetextureScript(path, remapFile.FullName, outputPath);
+    string scriptPath = RetextureExport.GenerateRetextureScript(path, remapFile.FullName, outputPath, texDir);
     AnsiConsole.MarkupLine($"  Generated script: [blue]{Path.GetFileName(scriptPath)}[/]");
 
     string workingDir = Path.GetDirectoryName(outputPath) ?? ".";

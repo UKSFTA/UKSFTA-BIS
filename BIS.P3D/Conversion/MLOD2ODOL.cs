@@ -218,18 +218,28 @@ namespace BIS.P3D.Conversion
             WriteSections(w, mlodLod, texArr, textureIdxMap, materialIdxMap, version);
             logPos("after_sections");
 
-            // NamedSelections
             var nsTaggs = mlodLod.Taggs.OfType<NamedSelectionTagg>().ToArray();
             w.Write(nsTaggs.Length);
             foreach (var nst in nsTaggs)
             {
+                var selectedVerts = new List<int>();
+                for (int i = 0; i < nst.Points.Length; i++)
+                    if (nst.Points[i] != 0) selectedVerts.Add(i);
+
+                var selectedFaces = new List<int>();
+                for (int i = 0; i < nst.Faces.Length; i++)
+                    if (nst.Faces[i] != 0) selectedFaces.Add(i);
+
+                var weights = selectedVerts.Select(v => (byte)255).ToArray();
+
                 w.WriteAsciiz(nst.Name);
-                WriteCompressedVertexIndexArray(w, version, []);
-                w.Write(0); w.Write(false);
-                w.WriteCompressedIntArray((int[])[]);
-                WriteCompressedVertexIndexArray(w, version, []);
+                WriteCompressedVertexIndexArray(w, version, selectedFaces.ToArray());
                 w.Write(0);
-                w.WriteCompressed((byte[])[]);
+                w.Write(false);
+                w.WriteCompressedIntArray((int[])[]);
+                WriteCompressedVertexIndexArray(w, version, selectedVerts.ToArray());
+                w.Write(weights.Length);
+                w.WriteCompressed(weights);
             }
             logPos("after_named_selections");
 

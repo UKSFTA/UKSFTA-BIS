@@ -14,9 +14,10 @@ namespace BIS.P3D.Export
         /// <param name="remapPath">Path to JSON remap config</param>
         /// <param name="outputPath">Output .p3d path</param>
         /// <param name="textureDir">Optional path to load PAA textures from (uses armaio)</param>
+        /// <param name="lodFilter">Optional LOD type filter: "view", "shadow", "geometry", or null for all</param>
         /// <returns>Path to the generated script</returns>
         public static string GenerateRetextureScript(
-            string modelPath, string remapPath, string outputPath, string? textureDir = null)
+            string modelPath, string remapPath, string outputPath, string? textureDir = null, string? lodFilter = null)
         {
             string remapJson = File.ReadAllText(remapPath);
             string scriptDir = Path.GetDirectoryName(outputPath) ?? ".";
@@ -145,6 +146,31 @@ namespace BIS.P3D.Export
             writer.WriteLine("    p3d_mats = [m for m in bpy.data.materials if m.name.startswith('P3D:')]");
             writer.WriteLine("    print(f\"[BIS] Found {{len(p3d_mats)}} P3D materials\", flush=True)");
             writer.WriteLine();
+
+            // LOD filter: restrict remapping to specific LOD type
+            if (!string.IsNullOrEmpty(lodFilter))
+            {
+                string lodFilterUpper = lodFilter.ToUpperInvariant();
+                writer.WriteLine($"    # Filter materials by LOD type: {lodFilterUpper}");
+                writer.WriteLine("    # Build material-to-LOD map from scene objects");
+                writer.WriteLine("    mat_lod = {}");
+                writer.WriteLine("    for obj in bpy.data.objects:");
+                writer.WriteLine("        if not getattr(obj, 'a3ob_properties_object', None):");
+                writer.WriteLine("            continue");
+                writer.WriteLine("        if not obj.a3ob_properties_object.is_a3_lod:");
+                writer.WriteLine("            continue");
+                writer.WriteLine("        lod_type = obj.a3ob_properties_object.lod");
+                writer.WriteLine("        for slot in getattr(obj, 'material_slots', []):");
+                writer.WriteLine("            if slot.material and slot.material.name.startswith('P3D:'):");
+                writer.WriteLine("                if slot.material.name not in mat_lod:");
+                writer.WriteLine("                    mat_lod[slot.material.name] = lod_type");
+                writer.WriteLine("    lod_filter = \"{lodFilterUpper}\"");
+                writer.WriteLine("    before = len(p3d_mats)");
+                writer.WriteLine("    p3d_mats = [m for m in p3d_mats if mat_lod.get(m.name, '') == lod_filter]");
+                writer.WriteLine("    after = len(p3d_mats)");
+                writer.WriteLine("    print(f\"[BIS] LOD filter [{lodFilterUpper}]: {{before}} -> {{after}} materials\", flush=True)");
+                writer.WriteLine();
+            }
 
             // Load PAA textures if textureDir provided
             if (textureDir != null)

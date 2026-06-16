@@ -1,6 +1,7 @@
 ﻿using BIS.Core.Streams;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -32,16 +33,28 @@ namespace BIS.ALB
 
         private LinkedList<ALB_Entry> entries = new LinkedList<ALB_Entry>();
 
+        public int TagsCount => tags.Count;
+        public int ClassesCount => classes.Count;
+        public int EntriesCount => entries.Count;
+
         public class ALB_Entry
         {
             public int TagID { get; }
             public ALB_Value Value { get; }
+            public ALB_Datatype DataType { get; }
 
             public ALB_Entry(BinaryReaderEx input, int? layerVersion = null)
             {
                 TagID = input.ReadInt16();
-                var datatype = (ALB_Datatype)input.ReadByte();
-                Value = ALB_Value.ReadALBValue(datatype, input, layerVersion);
+                DataType = (ALB_Datatype)input.ReadByte();
+                Value = ALB_Value.ReadALBValue(DataType, input, layerVersion);
+            }
+
+            public void WriteTo(BinaryWriterEx output)
+            {
+                output.Write((short)TagID);
+                output.Write((byte)DataType);
+                Value.WriteTo(output);
             }
         }
 
@@ -87,6 +100,7 @@ namespace BIS.ALB
             }
 
             public abstract string ToString(ALB1 alb, int indLvl = 0);
+            public abstract void WriteTo(BinaryWriterEx output);
         }
 
         public class ALB_SimpleValue<T> : ALB_Value
@@ -101,6 +115,26 @@ namespace BIS.ALB
             {
                 if (Value is string) return $"\"{Value}\"";
                 return Value.ToString();
+            }
+
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                if (Value is bool bv)
+                    output.Write(bv);
+                else if (Value is char cv)
+                    output.Write((byte)cv);
+                else if (Value is float fv)
+                    output.Write(fv);
+                else if (Value is int iv)
+                    output.Write(iv);
+                else if (Value is string sv)
+                {
+                    var bytes = Encoding.ASCII.GetBytes(sv);
+                    output.Write((ushort)bytes.Length);
+                    output.Write(bytes);
+                }
+                else if (Value is double dv)
+                    output.Write(dv);
             }
         }
 
@@ -133,6 +167,26 @@ namespace BIS.ALB
 
                 return $"\r\n{alb.EntriesToString(entries, indLvl + 1)}";
             }
+
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                if (entries != null && entries.Length > 0)
+                {
+                    var mem = new MemoryStream();
+                    var w = new BinaryWriterEx(mem, true);
+                    foreach (var e in entries)
+                        e.WriteTo(w);
+                    var data = mem.ToArray();
+                    output.Write(4 + data.Length);
+                    output.Write(entries.Length);
+                    output.Write(data);
+                }
+                else
+                {
+                    output.Write(4);
+                    output.Write(0);
+                }
+            }
         }
 
         public class ALB_Object : ALB_Value
@@ -161,6 +215,18 @@ namespace BIS.ALB
                 return $"\r\n{alb.EntriesToString(entries, indLvl + 1)}";
             }
 
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                var mem = new MemoryStream();
+                var w = new BinaryWriterEx(mem, true);
+                w.Write((short)classID);
+                w.Write(objectID);
+                foreach (var e in entries)
+                    e.WriteTo(w);
+                var data = mem.ToArray();
+                output.Write(data.Length);
+                output.Write(data);
+            }
         }
 
         public class ALB_Unknown : ALB_Value
@@ -178,6 +244,12 @@ namespace BIS.ALB
             {
                 return $"\r\n{alb.EntryToString(entry1, indLvl + 1)}\r\n{alb.EntryToString(entry2, indLvl + 1)}";
             }
+
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                entry1.WriteTo(output);
+                entry2.WriteTo(output);
+            }
         }
 
         public class ALB_Unknown2 : ALB_Value
@@ -192,6 +264,11 @@ namespace BIS.ALB
             public override string ToString(ALB1 alb, int indLvl = 0)
             {
                 return string.Join(",", data);
+            }
+
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                output.Write(data);
             }
         }
 
@@ -208,6 +285,13 @@ namespace BIS.ALB
             public override string ToString(ALB1 alb, int indLvl = 0)
             {
                 return string.Join(", ", values);
+            }
+
+            public override void WriteTo(BinaryWriterEx output)
+            {
+                output.Write((byte)values.Length);
+                foreach (var v in values)
+                    output.Write(v);
             }
         }
         #endregion
@@ -323,6 +407,40 @@ namespace BIS.ALB
         public override string ToString()
         {
             return EntriesToString(entries);
+        }
+
+        public void SaveTo(string path)
+        {
+            using var stream = File.Create(path);
+            var output = new BinaryWriterEx(stream);
+
+            output.Write(Encoding.ASCII.GetBytes("ALB1"));
+            output.Write(new byte[15]);
+
+            output.Write(tags.Count);
+            foreach (var kvp in tags)
+            {
+                output.Write((ushort)kvp.Key);
+                var nameBytes = Encoding.ASCII.GetBytes(kvp.Value);
+                output.Write((ushort)nameBytes.Length);
+                output.Write(nameBytes);
+            }
+
+            output.Write(new byte[3]);
+
+            output.Write(classes.Count);
+            foreach (var kvp in classes)
+            {
+                output.Write((ushort)kvp.Key);
+                var nameBytes = Encoding.ASCII.GetBytes(kvp.Value);
+                output.Write((ushort)nameBytes.Length);
+                output.Write(nameBytes);
+            }
+
+            output.Write(new byte[6]);
+
+            foreach (var entry in entries)
+                entry.WriteTo(output);
         }
     }
 }

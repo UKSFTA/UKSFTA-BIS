@@ -78,15 +78,17 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles.Specialized
         }
 
         [Fact]
-        public void IsValidPathString_ContainsQuestionMark_ReturnsFalse()
+        public void IsValidPathString_ContainsQuestionMark_ReturnsTrue()
         {
-            Assert.False(ProfileUtils.IsValidPathString("data/tex/old_co?x.paa"));
+            // Wildcards are allowed — they're part of obfuscated config.bin paths
+            Assert.True(ProfileUtils.IsValidPathString("data/tex/old_co?x.paa"));
         }
 
         [Fact]
-        public void IsValidPathString_ContainsAsterisk_ReturnsFalse()
+        public void IsValidPathString_ContainsAsterisk_ReturnsTrue()
         {
-            Assert.False(ProfileUtils.IsValidPathString("data/tex/*.paa"));
+            // Wildcards are allowed — they're part of obfuscated config.bin paths
+            Assert.True(ProfileUtils.IsValidPathString("data/tex/*.paa"));
         }
 
         [Fact]

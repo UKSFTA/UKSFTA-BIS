@@ -88,26 +88,26 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
             Assert.Empty(result.RecoveredNames);
         }
 
-        // ─── Test: Fallback path matching ───
+        // ─── Test: Config model match ───
 
         [Fact]
-        public void Deobfuscate_FallbackPathMatch_RecoversSuffixFile()
+        public void Deobfuscate_ConfigModelMatch_RecoversP3d()
         {
             var pbo = MakePbo();
-            // Config with a path in the same directory as the suffix file
-            var configBin = CreateConfigWithPaths(
-                ("avs_assault_vest", new[] { "data\\abav\\avs_assault_vest_co.paa" })
+            // Config with class having model= pointing to an obfuscated p3d path
+            var configBin = CreateConfigWithModelPaths(
+                ("AVS_AssaultVestL", new[] { "data\\abav\\\u043E\u0431\u0444.p3d" })
             );
             pbo.Files.Add(new DummyFileEntry("config.bin", configBin));
-            // Suffix file: dir=data/abav, name=_co.paa
-            // Fallback match: suffixKey = "data/abav|_co.paa" matches lookup key
-            pbo.Files.Add(new DummyFileEntry("data\\abav\\_co.paa", PaaHeader));
+            // Suffix .p3d file with RawFileName matching the config model path
+            pbo.Files.Add(new DummyFileEntry("data\\abav\\.p3d", PaaHeader,
+                rawFileName: "data\\abav\\\u043E\u0431\u0444.p3d"));
 
             var result = new SuffixRecoveryProfile().Deobfuscate(pbo);
 
             Assert.Single(result.RecoveredNames);
             Assert.Equal(1, result.Stats["Recovered"]);
-            Assert.Equal("data/abav/avs_assault_vest_co.paa", result.RecoveredNames[1]);
+            Assert.Equal("data/abav/avs_assaultvestl.p3d", result.RecoveredNames[1]);
         }
 
         [Fact]
@@ -128,22 +128,23 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         }
 
         [Fact]
-        public void Deobfuscate_FallbackPathMatch_MultipleCandidates_UsesEachOnce()
+        public void Deobfuscate_ConfigImageMatch_RecoversPaa()
         {
             var pbo = MakePbo();
-            var configBin = CreateConfigWithPaths(
-                ("vest_a", new[] { "data\\abav\\vest_a_co.paa" }),
-                ("vest_b", new[] { "data\\abav\\vest_b_co.paa" })
+            // Config with class having image= pointing to an obfuscated paa path
+            var configBin = CreateConfigWithImagePaths(
+                ("MC_Coyote", new[] { "jsoar\\data\\acex\\\u043E\u0431\u0444.paa" })
             );
             pbo.Files.Add(new DummyFileEntry("config.bin", configBin));
-            pbo.Files.Add(new DummyFileEntry("data\\abav\\_co.paa", PaaHeader));
-            pbo.Files.Add(new DummyFileEntry("data\\abav\\_co.paa", PaaHeader)); // same suffix
+            // Suffix .paa file with RawFileName matching the config image path
+            pbo.Files.Add(new DummyFileEntry("data\\acex\\.paa", PaaHeader,
+                rawFileName: "data\\acex\\\u043E\u0431\u0444.paa"));
 
             var result = new SuffixRecoveryProfile().Deobfuscate(pbo);
 
-            // Both have suffix _co.paa in same dir, but only 2 known paths
-            Assert.Equal(2, result.Stats["Recovered"]);
-            Assert.Equal(2, result.RecoveredNames.Count);
+            Assert.Single(result.RecoveredNames);
+            Assert.Equal(1, result.Stats["Recovered"]);
+            Assert.Equal("data/acex/mc_coyote.paa", result.RecoveredNames[1]);
         }
 
         // ─── Test: Class-name matching ───
@@ -312,25 +313,31 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         // ─── Test: Prefix stripping ───
 
         [Fact]
-        public void Deobfuscate_PrefixIsNull_PathExtractionWorks()
+        public void Deobfuscate_PrefixIsNull_DoesNotCrash()
         {
             // Prefix is null for new PBO() - verify it doesn't crash
+            // Config model paths need model= property, not generic path0
             var pbo = MakePbo();
-            var configBin = CreateConfigWithPaths(
-                ("avs_assault_vest", new[] { "data\\abav\\avs_assault_vest_co.paa" })
+            var configBin = CreateConfigWithModelPaths(
+                ("AVS_AssaultVestL", new[] { "other\\prefix\\\u043E\u0431\u0444.p3d" })
             );
             pbo.Files.Add(new DummyFileEntry("config.bin", configBin));
-            pbo.Files.Add(new DummyFileEntry("data\\abav\\_co.paa", PaaHeader));
+            // suffix file with matching RawFileName (without PBO prefix)
+            pbo.Files.Add(new DummyFileEntry("data\\abav\\.p3d", PaaHeader,
+                rawFileName: "other\\prefix\\\u043E\u0431\u0444.p3d"));
 
             var result = new SuffixRecoveryProfile().Deobfuscate(pbo);
 
+            // Prefix is null, so no prefix stripping needed.
+            // Config model path "other/prefix/obf.p3d" matches RawFileName -> recovered
             Assert.Equal(1, result.Stats["Recovered"]);
+            Assert.Equal("data/abav/avs_assaultvestl.p3d", result.RecoveredNames[1]);
         }
 
         // ─── Test: RVMAT scanning ───
 
         [Fact]
-        public void Deobfuscate_RvmatFile_ExtractsAdditionalPaths()
+        public void Deobfuscate_RvmatFile_PathsExtractedButNotUsedForNaming()
         {
             var pbo = MakePbo();
             // Config has one known path
@@ -341,16 +348,14 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
             // RVMAT with an additional texture path not in config
             var rvmatContent = CreateRvmatWithTexture("data\\abav\\extra_texture_co.paa");
             pbo.Files.Add(new DummyFileEntry("mat.rvmat", rvmatContent));
-            // Suffix file that should match the extra path
+            // Suffix file — path-based matching was removed, only class/model/image matching
             pbo.Files.Add(new DummyFileEntry("data\\abav\\_co.paa", PaaHeader));
 
             var result = new SuffixRecoveryProfile().Deobfuscate(pbo);
 
-            // The RVMAT export should add "data/abav/extra_texture_co.paa" to knownPaths
-            // Then the suffix file should match via fallback path matching
-            // The suffix _co.paa could match EITHER the config path or the RVMAT path
-            // Both are at data/abav/*_co.paa so both are eligible
-            Assert.Equal(1, result.Stats["Recovered"]);
+            // No recovery: the suffix file's dir "data/abav" doesn't contain class words
+            // (avs/assault/vest), and config doesn't have model=/image= properties.
+            Assert.Equal(0, result.Stats["Recovered"]);
         }
 
         // ─── Test: Profile name ───
@@ -397,6 +402,46 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
 
         // ─── Helpers ───
 
+        private static byte[] CreateConfigWithModelPaths(params (string className, string[] paths)[] classDefs)
+        {
+            var entries = new List<ParamEntry>();
+            foreach (var (className, paths) in classDefs)
+            {
+                var classEntries = new List<ParamEntry>();
+                for (int i = 0; i < paths.Length; i++)
+                {
+                    classEntries.Add(new ParamValue("model", paths[i]));
+                }
+                entries.Add(new ParamClass(className, classEntries.ToArray()));
+            }
+
+            var config = new ParamFile
+            {
+                Root = new ParamClass("root", entries.ToArray())
+            };
+            return SerializeParamFile(config);
+        }
+
+        private static byte[] CreateConfigWithImagePaths(params (string className, string[] paths)[] classDefs)
+        {
+            var entries = new List<ParamEntry>();
+            foreach (var (className, paths) in classDefs)
+            {
+                var classEntries = new List<ParamEntry>();
+                for (int i = 0; i < paths.Length; i++)
+                {
+                    classEntries.Add(new ParamValue("image", paths[i]));
+                }
+                entries.Add(new ParamClass(className, classEntries.ToArray()));
+            }
+
+            var config = new ParamFile
+            {
+                Root = new ParamClass("root", entries.ToArray())
+            };
+            return SerializeParamFile(config);
+        }
+
         private static byte[] CreateRvmatWithTexture(string texturePath)
         {
             var config = new ParamFile
@@ -421,16 +466,17 @@ namespace BIS.PBO.Deobfuscator.Test.Profiles
         private class DummyFileEntry : IPBOFileEntry
         {
             public string FileName { get; }
-            public string RawFileName => FileName;
+            public string RawFileName { get; }
             public int Size => _data.Length;
             public int TimeStamp => 0;
             public bool IsCompressed => false;
             public int DiskSize => _data.Length;
             private readonly byte[] _data;
 
-            public DummyFileEntry(string fileName, byte[] data)
+            public DummyFileEntry(string fileName, byte[] data, string? rawFileName = null)
             {
                 FileName = fileName;
+                RawFileName = rawFileName ?? fileName;
                 _data = data;
             }
 

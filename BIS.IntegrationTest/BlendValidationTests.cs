@@ -115,7 +115,7 @@ public class BlendValidationTests
             // Run CLI to extract and export
             string projectDir = Path.GetFullPath(
                 Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"));
-            string cliArgs = $"run --project \"{projectDir}\" --no-build -- pbo extract \"{testPbo}\" --output \"{tempDir}\" --blender";
+            string cliArgs = $"run --project \"{projectDir}\" --configuration Release --no-build -- pbo extract \"{testPbo}\" --output \"{tempDir}\" --blender";
 
             using var cli = new Process();
             cli.StartInfo.FileName = "dotnet";

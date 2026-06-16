@@ -24,7 +24,7 @@ public class CliTest : IDisposable
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{projectDir}\" --no-build -- {args}",
+            Arguments = $"run --project \"{projectDir}\" --configuration Release --no-build -- {args}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -248,7 +248,7 @@ public class CliTest : IDisposable
         var psiExtract = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --no-build -- pbo extract {pboPathFull} -o {extractDir}",
+            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --configuration Release --no-build -- pbo extract {pboPathFull} -o {extractDir}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -261,7 +261,7 @@ public class CliTest : IDisposable
         var psiLint = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --no-build -- lint sqf {extractDir} --exit-code",
+            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --configuration Release --no-build -- lint sqf {extractDir} --exit-code",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -275,7 +275,7 @@ public class CliTest : IDisposable
         var psiFmt = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --no-build -- fmt sqf {extractDir}",
+            Arguments = $"run --project \"{Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "BIS.CLI"))}\" --configuration Release --no-build -- fmt sqf {extractDir}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,

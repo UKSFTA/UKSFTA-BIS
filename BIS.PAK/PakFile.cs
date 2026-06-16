@@ -274,6 +274,145 @@ public class PakFile : IDisposable
         return BitConverter.ToInt32(bytes);
     }
 
+    private static void WriteInt32BE(BinaryWriter writer, int value)
+    {
+        var bytes = BitConverter.GetBytes(value);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(bytes);
+        writer.Write(bytes);
+    }
+
+    private class PakSaveNode
+    {
+        public string Name;
+        public bool IsDirectory;
+        public PakEntry Entry;
+        public int BinaryOffset;
+        public readonly List<PakSaveNode> Children = new();
+    }
+
+    private static void WritePakNode(BinaryWriter writer, PakSaveNode node)
+    {
+        if (node.IsDirectory)
+        {
+            writer.Write((byte)0);
+            var nameBytes = Encoding.ASCII.GetBytes(node.Name);
+            writer.Write((byte)nameBytes.Length);
+            writer.Write(nameBytes);
+            writer.Write(node.Children.Count);
+            foreach (var child in node.Children)
+                WritePakNode(writer, child);
+        }
+        else
+        {
+            writer.Write((byte)1);
+            var nameBytes = Encoding.ASCII.GetBytes(node.Name);
+            writer.Write((byte)nameBytes.Length);
+            writer.Write(nameBytes);
+            writer.Write(node.BinaryOffset);
+            writer.Write(node.Entry.CompressedSize);
+            writer.Write(node.Entry.OriginalSize);
+            writer.Write(0);
+            var compType = BitConverter.GetBytes((int)node.Entry.CompressionType);
+            if (BitConverter.IsLittleEndian)
+                Array.Reverse(compType);
+            writer.Write(compType);
+            writer.Write(0);
+        }
+    }
+
+    public void SaveTo(string path)
+    {
+        // Build tree from flat entries (which are in depth-first traversal order)
+        var root = new PakSaveNode { Name = "", IsDirectory = true };
+        foreach (var entry in Entries)
+        {
+            var parts = entry.FullPath.Split('\\');
+            var current = root;
+            for (int i = 0; i < parts.Length; i++)
+            {
+                var child = current.Children.FirstOrDefault(c => c.Name == parts[i]);
+                if (child == null)
+                {
+                    child = new PakSaveNode
+                    {
+                        Name = parts[i],
+                        IsDirectory = i < parts.Length - 1 || entry.IsDirectory,
+                        Entry = entry,
+                    };
+                    current.Children.Add(child);
+                }
+                current = child;
+            }
+        }
+
+        // Read all file entry data
+        var fileData = new Dictionary<PakEntry, byte[]>();
+        foreach (var entry in Entries.Where(e => !e.IsDirectory))
+            fileData[entry] = ReadEntryData(entry);
+
+        using var stream = File.Create(path);
+        using var writer = new BinaryWriter(stream, Encoding.ASCII, true);
+
+        // FORM header
+        writer.Write("FORM"u8.ToArray());
+        var formSizePos = stream.Position;
+        writer.Write(0);
+
+        writer.Write("PAC1"u8.ToArray());
+
+        // HEAD chunk: 32 bytes (version + padding)
+        writer.Write("HEAD"u8.ToArray());
+        WriteInt32BE(writer, 32);
+        writer.Write(Version);
+        writer.Write(new byte[28]);
+
+        // DATA chunk: concatenated raw file data
+        var dataStream = new MemoryStream();
+        foreach (var entry in Entries.Where(e => !e.IsDirectory))
+        {
+            var data = fileData[entry];
+            // Find node and update its BinaryOffset
+            var stack = new Stack<PakSaveNode>();
+            stack.Push(root);
+            while (stack.Count > 0)
+            {
+                var node = stack.Pop();
+                if (!node.IsDirectory && node.Entry == entry)
+                {
+                    node.BinaryOffset = (int)dataStream.Position;
+                    break;
+                }
+                foreach (var child in node.Children)
+                    stack.Push(child);
+            }
+            dataStream.Write(data, 0, data.Length);
+        }
+
+        writer.Write("DATA"u8.ToArray());
+        var dataBytes = dataStream.ToArray();
+        WriteInt32BE(writer, dataBytes.Length);
+        writer.Write(dataBytes);
+
+        // FILE chunk: entry metadata tree
+        var fileChunk = new MemoryStream();
+        var fileWriter = new BinaryWriter(fileChunk);
+        fileWriter.Write(new byte[2]);
+        fileWriter.Write(new byte[4]);
+        foreach (var child in root.Children)
+            WritePakNode(fileWriter, child);
+
+        writer.Write("FILE"u8.ToArray());
+        var fileChunkBytes = fileChunk.ToArray();
+        WriteInt32BE(writer, fileChunkBytes.Length);
+        writer.Write(fileChunkBytes);
+
+        // Update FORM size (everything after the 8-byte FORM header)
+        var formSize = (int)(stream.Length - 8);
+        stream.Seek(formSizePos, SeekOrigin.Begin);
+        WriteInt32BE(writer, formSize);
+    }
+
     public void Dispose()
     {
         if (!_disposed)

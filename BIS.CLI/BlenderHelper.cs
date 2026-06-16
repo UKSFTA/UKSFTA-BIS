@@ -76,17 +76,20 @@ internal static class BlenderHelper
 
     /// <summary>
     /// Exports a single .p3d file to .blend format.
+    /// PAA textures are decoded in-Blender via armaio (no pre-conversion needed).
     /// </summary>
-    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir)
+    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir, bool convertPaa = false)
     {
         string extractRoot = DeriveExtractRoot(p3dPath);
-        string texturesDir = Path.Combine(outputDir, "_textures");
+        string? texturesDir = null;
 
-        Directory.CreateDirectory(texturesDir);
-
-        // Convert PAAs to PNGs
-        int texCount = BlenderExport.ExportAll(extractRoot, texturesDir);
-        Console.WriteLine($"  Converted {texCount} texture(s) from {extractRoot}");
+        if (convertPaa)
+        {
+            texturesDir = Path.Combine(outputDir, "_textures");
+            Directory.CreateDirectory(texturesDir);
+            int texCount = BlenderExport.ExportAll(extractRoot, texturesDir);
+            Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
+        }
 
         // Generate single-model batch script
         string scriptPath = BlenderExport.GenerateSingleModelScript(p3dPath, extractRoot, outputDir, texturesDir);
@@ -94,6 +97,14 @@ internal static class BlenderHelper
 
         // Run Blender
         return await RunBatchImportAsync(scriptPath, outputDir);
+    }
+
+    /// <summary>
+    /// Runs an arbitrary Blender Python script (e.g. re-texturing script).
+    /// </summary>
+    public static async Task<bool> RunScriptAsync(string scriptPath, string workingDir)
+    {
+        return await RunBatchImportAsync(scriptPath, workingDir);
     }
 
     private static string? ResolveBlenderPath()

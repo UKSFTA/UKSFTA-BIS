@@ -155,20 +155,20 @@ public class SqfParser
         {
             switch (token.Text)
             {
-                case "if":     return ParseIf();
-                case "while":  return ParseWhile();
-                case "for":    return ParseFor();
+                case "if": return ParseIf();
+                case "while": return ParseWhile();
+                case "for": return ParseFor();
                 case "switch": return ParseSwitch();
                 case "private": return ParsePrivate();
                 case "params": return ParseParams();
-                case "try":    return ParseTry();
-                case "throw":  return ParseThrow();
-                case "break":       return ParseBreak();
-                case "continue":    return ParseContinue();
-                case "breakWith":   return ParseBreakWith();
+                case "try": return ParseTry();
+                case "throw": return ParseThrow();
+                case "break": return ParseBreak();
+                case "continue": return ParseContinue();
+                case "breakWith": return ParseBreakWith();
                 case "continueWith": return ParseContinueWith();
-                case "scopeName":   return ParseScopeName();
-                case "case":    return ParseCase();
+                case "scopeName": return ParseScopeName();
+                case "case": return ParseCase();
                 case "default": return ParseDefault();
             }
         }
@@ -353,26 +353,26 @@ public class SqfParser
             // Unary prefix operators
             case SqfTokenType.Not:
             case SqfTokenType.Tilde:
-            {
-                Consume();
-                var opText = token.Text;
-                var operand = ParseAtomic();
-                return WithLoc(new SqfUnaryOp(opText, operand), token);
-            }
+                {
+                    Consume();
+                    var opText = token.Text;
+                    var operand = ParseAtomic();
+                    return WithLoc(new SqfUnaryOp(opText, operand), token);
+                }
 
             case SqfTokenType.Minus:
-            {
-                Consume();
-                var operand = ParseAtomic();
-                return WithLoc(new SqfUnaryOp("-", operand), token);
-            }
+                {
+                    Consume();
+                    var operand = ParseAtomic();
+                    return WithLoc(new SqfUnaryOp("-", operand), token);
+                }
 
             case SqfTokenType.Plus:
-            {
-                Consume();
-                var operand = ParseAtomic();
-                return WithLoc(new SqfUnaryOp("+", operand), token);
-            }
+                {
+                    Consume();
+                    var operand = ParseAtomic();
+                    return WithLoc(new SqfUnaryOp("+", operand), token);
+                }
 
             // Config path starting with >>
             case SqfTokenType.Greater:
@@ -579,19 +579,22 @@ public class SqfParser
             var stepBlock = new SqfCodeBlock(new List<SqfStatement>
             {
                 new SqfExpressionStatement(stepAssign) { File = varToken.File, Line = varToken.Line, Column = varToken.Column }
-            }) { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
+            })
+            { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
 
             var initAssign = WithLoc(new SqfAssign(varName, startExpr), varToken);
             var initBlock = new SqfCodeBlock(new List<SqfStatement>
             {
                 new SqfExpressionStatement(initAssign) { File = varToken.File, Line = varToken.Line, Column = varToken.Column }
-            }) { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
+            })
+            { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
 
             var condExpr = WithLoc(new SqfBinaryOp("<=", varId, endExpr), varToken);
             var condBlock = new SqfCodeBlock(new List<SqfStatement>
             {
                 new SqfExpressionStatement(condExpr) { File = varToken.File, Line = varToken.Line, Column = varToken.Column }
-            }) { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
+            })
+            { File = varToken.File, Line = varToken.Line, Column = varToken.Column };
 
             return WithLoc(new SqfForStatement(initBlock, condBlock, stepBlock, body), token);
         }
@@ -629,7 +632,8 @@ public class SqfParser
         return new SqfCodeBlock(new List<SqfStatement>
         {
             new SqfExpressionStatement(expr) { File = expr.File, Line = expr.Line, Column = expr.Column }
-        }) { File = expr.File, Line = expr.Line, Column = expr.Column };
+        })
+        { File = expr.File, Line = expr.Line, Column = expr.Column };
     }
 
     private SqfSwitchStatement ParseSwitch()

@@ -2017,7 +2017,8 @@ public class SqfLinter
                             _diagnostics.Add(new SqfLintDiagnostic(
                                 "L-S36", SqfLintSeverity.Error,
                                 $"Global variable in private declaration: '{varName}'",
-                                nameNode.File, nameNode.Line, nameNode.Column) { Fix = fix });
+                                nameNode.File, nameNode.Line, nameNode.Column)
+                            { Fix = fix });
                         }
                         // L-S14: shadowing
                         if (symbols.IsShadowing(varName))
@@ -2112,7 +2113,8 @@ public class SqfLinter
                         _diagnostics.Add(new SqfLintDiagnostic(
                             "L-S04", SqfLintSeverity.Help,
                             $"Command '{id.Name}' should be '{correctCase}'",
-                            id.File, id.Line, id.Column) { Fix = fix });
+                            id.File, id.Line, id.Column)
+                        { Fix = fix });
                     }
                 }
                 // L-S17: var_all_caps
@@ -2124,7 +2126,8 @@ public class SqfLinter
                     _diagnostics.Add(new SqfLintDiagnostic(
                         "L-S17", SqfLintSeverity.Warning,
                         $"Variable '{id.Name}' is all-caps — may be an undefined macro",
-                        id.File, id.Line, id.Column) { Fix = fix });
+                        id.File, id.Line, id.Column)
+                    { Fix = fix });
                 }
                 // L-S23: reassign_reserved_variable — handled in assignments
                 break;
@@ -2171,7 +2174,8 @@ public class SqfLinter
                         _diagnostics.Add(new SqfLintDiagnostic(
                             "L-S19", SqfLintSeverity.Help,
                             $"Extra '!' before comparison — use 'isNotEqualTo' instead",
-                            uo.File, uo.Line, uo.Column) { Fix = fix });
+                            uo.File, uo.Line, uo.Column)
+                        { Fix = fix });
                     }
                 }
                 break;
@@ -2214,7 +2218,8 @@ public class SqfLinter
                         _diagnostics.Add(new SqfLintDiagnostic(
                             "L-S20", SqfLintSeverity.Warning,
                             $"Comparison to boolean literal — '{bin.Left}' can be used directly",
-                            bin.File, bin.Line, bin.Column) { Fix = fix });
+                            bin.File, bin.Line, bin.Column)
+                        { Fix = fix });
                     }
                 }
 
@@ -2257,7 +2262,8 @@ public class SqfLinter
                         _diagnostics.Add(new SqfLintDiagnostic(
                             "L-S25", SqfLintSeverity.Help,
                             $"Use '{countArr.Name} isEqualTo []' instead of 'count {countArr.Name} == 0'",
-                            bin.File, bin.Line, bin.Column) { Fix = fix });
+                            bin.File, bin.Line, bin.Column)
+                        { Fix = fix });
                     }
                 }
 
@@ -2277,7 +2283,8 @@ public class SqfLinter
                     _diagnostics.Add(new SqfLintDiagnostic(
                         "L-S16", SqfLintSeverity.Help,
                         $"Local variable '{assign.Name}' should be private",
-                        assign.File, assign.Line, assign.Column) { Fix = fix });
+                        assign.File, assign.Line, assign.Column)
+                    { Fix = fix });
                 }
                 // L-S14: shadowing check for assignments
                 if (symbols.IsShadowing(assign.Name))
@@ -2407,7 +2414,8 @@ public class SqfLinter
                 _diagnostics.Add(new SqfLintDiagnostic(
                     "L-S27", SqfLintSeverity.Help,
                     $"Use '{arrayId.Name} select -1' instead of '{arrayId.Name} select (count {arrayId.Name} - 1)'",
-                    selectId.File, selectId.Line, selectId.Column) { Fix = fix });
+                    selectId.File, selectId.Line, selectId.Column)
+                { Fix = fix });
             }
         }
     }
@@ -2439,7 +2447,8 @@ public class SqfLinter
             _diagnostics.Add(new SqfLintDiagnostic(
                 "L-S05", SqfLintSeverity.Error,
                 $"Assignment in condition — use '==' instead of '='",
-                assign.File, assign.Line, assign.Column) { Fix = fix });
+                assign.File, assign.Line, assign.Column)
+            { Fix = fix });
         }
     }
 
@@ -2462,7 +2471,8 @@ public class SqfLinter
                 _diagnostics.Add(new SqfLintDiagnostic(
                     "L-S01", SqfLintSeverity.Warning,
                     "Tab character detected — use spaces for indentation",
-                    file.FilePath, line, col) { Fix = fix });
+                    file.FilePath, line, col)
+                { Fix = fix });
                 // Only report first tab per line to reduce noise
                 var nextLine = text.IndexOf('\n', i);
                 if (nextLine < 0) break;

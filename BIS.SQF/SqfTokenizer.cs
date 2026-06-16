@@ -56,9 +56,9 @@ public class SqfTokenizer
         switch (ch)
         {
             case ';': return Advance(SqfTokenType.Semicolon, ";");
-            case '(' : return Advance(SqfTokenType.LParen, "(");
-            case ')' : return Advance(SqfTokenType.RParen, ")");
-            case '[' : return Advance(SqfTokenType.LBracket, "[");
+            case '(': return Advance(SqfTokenType.LParen, "(");
+            case ')': return Advance(SqfTokenType.RParen, ")");
+            case '[': return Advance(SqfTokenType.LBracket, "[");
             case ']': return Advance(SqfTokenType.RBracket, "]");
             case '{': return Advance(SqfTokenType.LBrace, "{");
             case '}': return Advance(SqfTokenType.RBrace, "}");

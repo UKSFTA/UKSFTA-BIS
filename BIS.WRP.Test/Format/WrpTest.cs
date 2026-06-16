@@ -36,5 +36,42 @@ namespace BIS.WRP.Test
             var wrp = new AnyWrp();
             Assert.ThrowsAny<Exception>(() => wrp.Read(reader));
         }
+
+        [Fact]
+        public void Read_OPRW_TooShort_Throws()
+        {
+            // OPRW signature without enough data for version check
+            using var ms = new MemoryStream();
+            var writer = new BinaryWriterEx(ms);
+            writer.WriteAscii("OPRW", 4);
+            writer.Write(3); // version < 10 should throw NotSupportedException
+            writer.Flush();
+            ms.Position = 0;
+
+            var wrp = new AnyWrp();
+            Assert.Throws<NotSupportedException>(() => wrp.Read(new BinaryReaderEx(ms)));
+        }
+
+        [Fact]
+        public void Read_8WVR_TooShort_Throws()
+        {
+            // 8WVR signature (EditableWrp) without enough data
+            using var ms = new MemoryStream();
+            var writer = new BinaryWriterEx(ms);
+            writer.WriteAscii("8WVR", 4);
+            writer.Flush();
+            ms.Position = 0;
+
+            var wrp = new AnyWrp();
+            Assert.ThrowsAny<Exception>(() => wrp.Read(new BinaryReaderEx(ms)));
+        }
+
+        [Fact]
+        public void GetEditableWrp_BeforeRead_ReturnsNull()
+        {
+            var wrp = new AnyWrp();
+            var editable = wrp.GetEditableWrp();
+            Assert.Null(editable);
+        }
     }
 }

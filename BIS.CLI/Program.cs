@@ -77,6 +77,7 @@ var root = new RootCommand("BIS file format CLI tool")
             new Option<bool>(["--match-textures", "-m"], "After extraction, match orphan .paa files against known textures by pixel content"),
             new Option<bool>(["--fuzzy-match", "-fm"], () => true, "After extraction and exact-match, match orphan .paa files against known textures by structural similarity (same layout, different colors) [default: on]"),
             new Option<bool>(["--export-blender", "-b"], "Export models as Blender scripts with PNG textures alongside extracted files"),
+            new Option<FileInfo?>(["--retx"], "JSON remap config for batch re-texturing all .p3d models after extraction"),
         },
         new Command("pack", "Pack a directory into a PBO file")
         {
@@ -161,7 +162,7 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "pbo list":         HandlePBOList(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<bool>(sub, parse, "--raw")); break;
-                    case "pbo extract":      HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir"), GetOptVal<bool>(sub, parse, "--raw"), GetOptVal<bool>(sub, parse, "--match-textures"), GetOptVal<bool>(sub, parse, "--export-blender"), GetOptVal<bool>(sub, parse, "--fuzzy-match")); break;
+                    case "pbo extract":      HandlePBOExtract(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output-dir"), GetOptVal<bool>(sub, parse, "--raw"), GetOptVal<bool>(sub, parse, "--match-textures"), GetOptVal<bool>(sub, parse, "--export-blender"), GetOptVal<bool>(sub, parse, "--fuzzy-match"), GetOptVal<FileInfo?>(sub, parse, "--retx")); break;
                     case "pbo pack":         HandlePBOPack(GetDirArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output"), GetOptVal<string?>(sub, parse, "--prefix"), GetOptVal<bool>(sub, parse, "--compress")); break;
                     case "config serialize": HandleConfigSerialize(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--output")); break;
                     case "lint config":
@@ -992,7 +993,7 @@ static void HandlePBOList(string path, bool raw)
         AnsiConsole.MarkupLine($"[grey]({result.FilteredOut.Count} decoy/stub entries skipped)[/]");
 }
 
-static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bool matchTextures, bool exportBlender, bool fuzzyMatch)
+static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bool matchTextures, bool exportBlender, bool fuzzyMatch, FileInfo? retxFile = null)
 {
     var outDir = outputDir?.FullName ?? Path.GetFileNameWithoutExtension(path);
     var pbo = new BIS.PBO.PBO(path);
@@ -1061,6 +1062,54 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
         var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir, textureDir);
         int blenderResult = blenderTask.GetAwaiter().GetResult();
         AnsiConsole.MarkupLine($"[green]Blender export complete in {blenderDir}[/]");
+    }
+
+    if (retxFile != null)
+    {
+        string retxDir = Path.Combine(outDir, "_retx");
+        Directory.CreateDirectory(retxDir);
+        var p3dModels = Directory.GetFiles(outDir, "*.p3d", SearchOption.AllDirectories);
+        if (p3dModels.Length == 0)
+        {
+            AnsiConsole.MarkupLine($"[yellow]No .p3d files found in {outDir}[/]");
+        }
+        else
+        {
+            AnsiConsole.MarkupLine($"[blue]Batch re-texturing {p3dModels.Length} .p3d model(s)...[/]");
+            int successCount = 0;
+            int failCount = 0;
+            foreach (var modelPath in p3dModels)
+            {
+                string relPath = Path.GetRelativePath(outDir, modelPath);
+                string outputPath = Path.Combine(retxDir, relPath);
+                Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+                try
+                {
+                    string scriptPath = RetextureExport.GenerateRetextureScript(
+                        modelPath, retxFile.FullName, outputPath);
+                    bool ok = BlenderHelper.RunScriptAsync(scriptPath, Path.GetDirectoryName(outputPath)!).GetAwaiter().GetResult();
+                    if (ok)
+                    {
+                        AnsiConsole.MarkupLine($"  [green]✔ {relPath}[/]");
+                        successCount++;
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine($"  [red]✘ {relPath} (re-texture failed)[/]");
+                        failCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"  [red]✘ {relPath}: {ex.Message}[/]");
+                    failCount++;
+                }
+            }
+            if (failCount == 0)
+                AnsiConsole.MarkupLine($"[green]Batch re-texture complete: {successCount}/{p3dModels.Length} succeeded[/]");
+            else
+                AnsiConsole.MarkupLine($"[yellow]Batch re-texture: {successCount} succeeded, {failCount} failed[/]");
+        }
     }
 }
 

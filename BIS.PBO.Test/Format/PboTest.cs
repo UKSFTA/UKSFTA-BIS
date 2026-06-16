@@ -417,18 +417,20 @@ namespace BIS.PBO.Test.Format
 
                 try
                 {
-                    var loaded = new PBO(pboPath);
-                    var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
-                    Directory.CreateDirectory(outDir);
-                    try
+                    using (var loaded = new PBO(pboPath))
                     {
-                        loaded.ExtractFiles(loaded.Files, outDir);
-                        var extracted = File.ReadAllText(Path.Combine(outDir, "description.ext"));
-                        Assert.Equal(content, extracted);
-                    }
-                    finally
-                    {
-                        Directory.Delete(outDir, true);
+                        var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
+                        Directory.CreateDirectory(outDir);
+                        try
+                        {
+                            loaded.ExtractFiles(loaded.Files, outDir);
+                            var extracted = File.ReadAllText(Path.Combine(outDir, "description.ext"));
+                            Assert.Equal(content, extracted);
+                        }
+                        finally
+                        {
+                            Directory.Delete(outDir, true);
+                        }
                     }
                 }
                 finally
@@ -592,24 +594,28 @@ namespace BIS.PBO.Test.Format
 
                 try
                 {
-                    var loaded = new PBO(pboPath1);
-                    Assert.Equal(2, loaded.Files.Count);
-
-                    var pboPath2 = Path.Combine(Path.GetTempPath(), "test_repack2.pbo");
-                    loaded.SaveTo(pboPath2);
-
-                    try
+                    using (var loaded = new PBO(pboPath1))
                     {
-                        var reloaded = new PBO(pboPath2);
-                        Assert.Equal(2, reloaded.Files.Count);
+                        Assert.Equal(2, loaded.Files.Count);
 
-                        var names = reloaded.Files.Select(f => f.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
-                        Assert.Contains("mission.sqm", names);
-                        Assert.Contains("script_component.hpp", names);
-                    }
-                    finally
-                    {
-                        File.Delete(pboPath2);
+                        var pboPath2 = Path.Combine(Path.GetTempPath(), "test_repack2.pbo");
+                        loaded.SaveTo(pboPath2);
+
+                        try
+                        {
+                            using (var reloaded = new PBO(pboPath2))
+                            {
+                                Assert.Equal(2, reloaded.Files.Count);
+
+                                var names = reloaded.Files.Select(f => f.FileName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                                Assert.Contains("mission.sqm", names);
+                                Assert.Contains("script_component.hpp", names);
+                            }
+                        }
+                        finally
+                        {
+                            File.Delete(pboPath2);
+                        }
                     }
                 }
                 finally
@@ -643,18 +649,20 @@ namespace BIS.PBO.Test.Format
 
                 try
                 {
-                    var loaded = new PBO(pboPath);
-                    var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
-                    Directory.CreateDirectory(outDir);
-                    try
+                    using (var loaded = new PBO(pboPath))
                     {
-                        loaded.ExtractFiles(loaded.Files, outDir);
-                        var extracted = File.ReadAllBytes(Path.Combine(outDir, "binary.dat"));
-                        Assert.Equal(binaryData, extracted);
-                    }
-                    finally
-                    {
-                        Directory.Delete(outDir, true);
+                        var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
+                        Directory.CreateDirectory(outDir);
+                        try
+                        {
+                            loaded.ExtractFiles(loaded.Files, outDir);
+                            var extracted = File.ReadAllBytes(Path.Combine(outDir, "binary.dat"));
+                            Assert.Equal(binaryData, extracted);
+                        }
+                        finally
+                        {
+                            Directory.Delete(outDir, true);
+                        }
                     }
                 }
                 finally
@@ -695,26 +703,28 @@ namespace BIS.PBO.Test.Format
 
                 try
                 {
-                    var loaded = new PBO(pboPath);
-                    var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
-                    Directory.CreateDirectory(outDir);
-                    try
+                    using (var loaded = new PBO(pboPath))
                     {
-                        loaded.ExtractFiles(loaded.Files, outDir);
+                        var outDir = Path.Combine(Path.GetTempPath(), "pbo_out_" + Guid.NewGuid().ToString("N")[..8]);
+                        Directory.CreateDirectory(outDir);
+                        try
+                        {
+                            loaded.ExtractFiles(loaded.Files, outDir);
 
-                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
-                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "data", "m16.paa")));
-                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
-                        Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "scripts", "init.sqf")));
+                            Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
+                            Assert.True(File.Exists(Path.Combine(outDir, "addons", "weapons", "data", "m16.paa")));
+                            Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
+                            Assert.True(File.Exists(Path.Combine(outDir, "addons", "vehicles", "scripts", "init.sqf")));
 
-                        Assert.Equal("class Weapons {};",
-                            File.ReadAllText(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
-                        Assert.Equal("class Vehicles {};",
-                            File.ReadAllText(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
-                    }
-                    finally
-                    {
-                        Directory.Delete(outDir, true);
+                            Assert.Equal("class Weapons {};",
+                                File.ReadAllText(Path.Combine(outDir, "addons", "weapons", "config.cpp")));
+                            Assert.Equal("class Vehicles {};",
+                                File.ReadAllText(Path.Combine(outDir, "addons", "vehicles", "config.cpp")));
+                        }
+                        finally
+                        {
+                            Directory.Delete(outDir, true);
+                        }
                     }
                 }
                 finally

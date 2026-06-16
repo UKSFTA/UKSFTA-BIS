@@ -273,18 +273,29 @@ namespace BIS.PBO
 
         public void ExtractFiles(IEnumerable<IPBOFileEntry> entries, string target)
         {
-            foreach (var entry in entries)
+            try
             {
-                var path = Path.Combine(target, entry.FileName.Replace('\\', Path.DirectorySeparatorChar));
-
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-
-                using (var targetFile = File.Create(path))
+                foreach (var entry in entries)
                 {
-                    using (var source = entry.OpenRead())
+                    var path = Path.Combine(target, entry.FileName.Replace('\\', Path.DirectorySeparatorChar));
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(path));
+
+                    using (var targetFile = File.Create(path))
                     {
-                        source.CopyTo(targetFile);
+                        using (var source = entry.OpenRead())
+                        {
+                            source.CopyTo(targetFile);
+                        }
                     }
+                }
+            }
+            finally
+            {
+                if (pboFileStream != null)
+                {
+                    pboFileStream.Close();
+                    pboFileStream = null;
                 }
             }
         }

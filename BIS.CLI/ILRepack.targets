@@ -1,5 +1,5 @@
 <Project>
-  <Target Name="ILRepack" AfterTargets="Build" Condition="$(Configuration.Contains('Release'))">
+  <Target Name="CustomILRepack" AfterTargets="Build" Condition="$(Configuration.Contains('Release'))">
     <ItemGroup>
       <InputAssemblies Include="$(OutputPath)$(TargetName)$(TargetExt)"/>
       <InputAssemblies Include="$(OutputPath)*.dll" Exclude="$(OutputPath)$(TargetName)$(TargetExt);$(OutputPath)Spectre.Console.Ansi.dll"/>
@@ -14,7 +14,7 @@
       OutputFile="$(OutputPath)$(TargetName)$(TargetExt)"
     />
   </Target>
-  <Target AfterTargets="ILRepack" Name="CleanReferenceCopyLocalPaths"
+  <Target AfterTargets="CustomILRepack" Name="CustomCleanReferenceCopyLocalPaths"
     Condition="$(Configuration.Contains('Release')) and '$(ClearOutputDirectory)' != 'False'">
     <Delete Files="@(ReferenceCopyLocalPaths->'$(OutDir)%(DestinationSubDirectory)%(Filename)%(Extension)')" Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)', 'Spectre\.Console\.Ansi'))"/>
     <ItemGroup>

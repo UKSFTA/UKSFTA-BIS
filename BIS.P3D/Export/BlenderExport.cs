@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BIS.Core.Streams;
+using BIS.P3D.ODOL;
 
 namespace BIS.P3D.Export
 {
@@ -105,7 +107,7 @@ namespace BIS.P3D.Export
         /// <summary>
         /// Checks if a P3D file has empty LODs that cause the addon to hang.
         /// </summary>
-        private static bool HasEmptyLods(string p3dPath)
+        private static bool HasEmptyViewLod(string p3dPath)
         {
             try
             {
@@ -119,6 +121,177 @@ namespace BIS.P3D.Export
             }
         }
 
+        private static string SanitizeP3D(string p3dPath)
+        {
+            try
+            {
+                using var stream = File.OpenRead(p3dPath);
+                var p3d = new P3D(stream);
+                if (!p3d.LODs.Any(lod => lod.VertexCount == 0))
+                    return p3dPath;
+
+                string dir = Path.GetDirectoryName(p3dPath) ?? ".";
+                string name = Path.GetFileNameWithoutExtension(p3dPath);
+                string sanitizedPath = Path.Combine(dir, $"{name}.sanitized.p3d");
+
+                if (p3d.IsMLODFormat)
+                {
+                    var cleanLods = p3d.MLOD.Lods
+                        .Where(lod => lod.Points.Length > 0)
+                        .ToArray();
+                    var sanitized = new BIS.P3D.MLOD.MLOD(cleanLods);
+                    sanitized.WriteToFile(sanitizedPath, allowOverwriting: true);
+                }
+                else if (p3d.IsODOLFormat)
+                {
+                    var cleanLods = p3d.ODOL.Lods
+                        .Where(lod => lod.VertexCount > 0)
+                        .ToArray();
+                    p3d.ODOL.Lods = cleanLods;
+                    p3d.Write(new BinaryWriterEx(File.Create(sanitizedPath)));
+                }
+                else
+                {
+                    return p3dPath;
+                }
+
+                Console.WriteLine($"  Sanitized {name}: removed empty LODs -> {sanitizedPath}");
+                return sanitizedPath;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  Warning: Failed to sanitize {p3dPath}: {ex.Message}. Using original.");
+                return p3dPath;
+            }
+        }
+
+        /// <summary>
+        /// Builds a Python dict literal mapping rvmat paths to named selection names
+        /// from the P3D model file. This gives us proper naming like "radio" instead of "misc"
+        /// for objects that correspond to named selections.
+        /// Returns "None" if no mapping can be built (graceful fallback).
+        /// </summary>
+        private static string BuildSelectionMapLiteral(string p3dPath)
+        {
+            try
+            {
+                using var stream = File.OpenRead(p3dPath);
+                var p3d = new P3D(stream);
+
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                if (p3d.IsMLODFormat)
+                {
+                    // ILevelOfDetail.NamedSelections has a Select((_, i) => lod.Faces[i]) bug in MLOD
+                    var mlod = p3d.MLOD;
+                    if (mlod?.Lods == null) { Console.WriteLine($"[BIS sel_map] MLOD has no LODs"); return "None"; }
+                    Console.WriteLine($"[BIS sel_map] MLOD format, {mlod.Lods.Length} LODs");
+
+                    foreach (var lod in mlod.Lods.OrderByDescending(l => l.Resolution))
+                    {
+                        Console.WriteLine($"[BIS sel_map]   LOD res={lod.Resolution}, faces={lod.Faces?.Length ?? 0}");
+
+                        int allTaggs = lod.Taggs?.Count ?? 0;
+                        var selTaggs = lod.Taggs?.OfType<MLOD.NamedSelectionTagg>().ToList();
+                        Console.WriteLine($"[BIS sel_map]     Total taggs: {allTaggs}, NamedSelection: {selTaggs?.Count ?? 0}");
+                        if (selTaggs == null || selTaggs.Count == 0)
+                        {
+                            if (lod.Taggs != null)
+                            {
+                                foreach (var t in lod.Taggs.Take(20))
+                                    Console.WriteLine($"[BIS sel_map]       Tagg: type={t.GetType().Name}, name='{t.Name}'");
+                            }
+                            continue;
+                        }
+                        Console.WriteLine($"[BIS sel_map]     {selTaggs.Count} NamedSelection taggs");
+
+                        foreach (var nst in selTaggs)
+                        {
+                            if (string.IsNullOrEmpty(nst.Name)) continue;
+
+                            // byte array is membership bitmap: index=face idx, value=0=not selected, non-0=selected
+                            int nonZeroFaces = nst.Faces?.Count(b => b != 0) ?? 0;
+                            int nonZeroPoints = nst.Points?.Count(b => b != 0) ?? 0;
+                            Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}': non-zero faces={nonZeroFaces}, points={nonZeroPoints}, faceArrLen={nst.Faces?.Length ?? 0}, pointArrLen={nst.Points?.Length ?? 0}");
+
+                            var faceIndices = nst.Faces?.Select((b, i) => new { b, i })
+                                .Where(x => x.b != 0).Select(x => x.i).ToList();
+                            if (faceIndices == null || faceIndices.Count == 0)
+                            {
+                                continue;
+                            }
+
+                            var materials = faceIndices
+                                .Where(i => i >= 0 && i < lod.Faces.Length)
+                                .Select(i => lod.Faces[i].Material)
+                                .Where(m => !string.IsNullOrEmpty(m))
+                                .Distinct(StringComparer.OrdinalIgnoreCase)
+                                .ToList();
+
+                            if (materials.Count == 1)
+                            {
+                                string key = materials[0].Replace("\\", "/").ToLowerInvariant();
+                                Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}' -> '{key}'");
+                                if (!map.ContainsKey(key) || nst.Name.Length > map[key].Length)
+                                    map[key] = nst.Name;
+                            }
+                            else
+                            {
+                                Console.WriteLine($"[BIS sel_map]     NS '{nst.Name}': multi-material ({materials.Count}) or no material");
+                            }
+                        }
+                    }
+                }
+                else if (p3d.IsODOLFormat)
+                {
+                    Console.WriteLine($"[BIS sel_map] ODOL format");
+                    foreach (var lod in p3d.LODs.OrderByDescending(l => l.Resolution))
+                    {
+                        if (lod.Resolution < 1e8) continue;
+                        var selections = lod.NamedSelections?.ToList();
+                        if (selections == null || selections.Count == 0) continue;
+                        Console.WriteLine($"[BIS sel_map]   LOD res={lod.Resolution}: {selections.Count} selections");
+
+                        foreach (var ns in selections)
+                        {
+                            if (string.IsNullOrEmpty(ns.Name)) continue;
+                            string? material = ns.Material;
+                            if (string.IsNullOrEmpty(material)) continue;
+                            string key = material.Replace("\\", "/").ToLowerInvariant();
+                            if (!map.ContainsKey(key) || ns.Name.Length > map[key].Length)
+                                map[key] = ns.Name;
+                        }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"[BIS sel_map] Unknown P3D format");
+                    return "None";
+                }
+
+                Console.WriteLine($"[BIS sel_map] Total entries: {map.Count}");
+                if (map.Count == 0) return "None";
+
+                var sb = new StringBuilder();
+                sb.Append('{');
+                bool first = true;
+                foreach (var kv in map)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+                    sb.Append($"r\"{kv.Key}\": \"{kv.Value}\"");
+                }
+                sb.Append('}');
+                Console.WriteLine($"[BIS sel_map] Result: {sb}");
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BIS sel_map] Exception: {ex.Message}");
+                return "None";
+            }
+        }
+
         /// <summary>
         /// Builds a texture dictionary in C# as a Python dict literal string.
         /// Scans the extracted dir for PAAs (primary, via armaio) and PNGs (fallback).
@@ -127,45 +300,32 @@ namespace BIS.P3D.Export
         /// </summary>
         private static string BuildImageDictLiteral(string extractedDir, string? texturesDir)
         {
-            var dict = new Dictionary<string, (string path, string type)>(StringComparer.OrdinalIgnoreCase);
+            var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             int count = 0;
 
-            // Scan extracted dir for PNGs first (PAA overwrites below)
             foreach (var f in Directory.GetFiles(extractedDir, "*.png", SearchOption.AllDirectories))
             {
                 string key = Path.GetFileName(f).ToLowerInvariant();
                 if (!dict.ContainsKey(key))
                 {
-                    dict[key] = (f, "PNG");
+                    dict[key] = f;
                     count++;
                 }
                 string relKey = GetRelativePath(extractedDir, f).Replace('\\', '/').ToLowerInvariant();
                 if (!dict.ContainsKey(relKey))
-                    dict[relKey] = (f, "PNG");
+                    dict[relKey] = f;
             }
 
-            // Scan extracted dir for PAAs — overwrite PNG entries (armaio decodes PAA directly)
-            foreach (var f in Directory.GetFiles(extractedDir, "*.paa", SearchOption.AllDirectories))
-            {
-                string key = Path.GetFileName(f).ToLowerInvariant();
-                bool isNew = !dict.ContainsKey(key);
-                dict[key] = (f, "PAA");
-                if (isNew) count++;
-                string relKey = GetRelativePath(extractedDir, f).Replace('\\', '/').ToLowerInvariant();
-                dict[relKey] = (f, "PAA");
-            }
-
-            // Scan optional textures dir for PNGs — only add if no PAA already exists
             if (texturesDir != null && Directory.Exists(texturesDir))
             {
                 foreach (var f in Directory.GetFiles(texturesDir, "*.png", SearchOption.AllDirectories))
                 {
                     string key = Path.GetFileName(f).ToLowerInvariant();
-                    if (!dict.ContainsKey(key) || dict[key].type != "PAA")
-                        dict[key] = (f, "PNG");
+                    if (!dict.ContainsKey(key))
+                        dict[key] = f;
                     string relKey = GetRelativePath(texturesDir, f).Replace('\\', '/').ToLowerInvariant();
-                    if (!dict.ContainsKey(relKey) || dict[relKey].type != "PAA")
-                        dict[relKey] = (f, "PNG");
+                    if (!dict.ContainsKey(relKey))
+                        dict[relKey] = f;
                 }
             }
 
@@ -174,8 +334,8 @@ namespace BIS.P3D.Export
             foreach (var kv in dict)
             {
                 // Use raw string r"..." for paths (handles backslashes on Windows)
-                string pyPath = kv.Value.path.Replace("\\", "/");
-                sb.AppendLine($"    \"{kv.Key}\": (r\"{pyPath}\", \"{kv.Value.type}\"),");
+                string pyPath = kv.Value.Replace("\\", "/");
+                sb.AppendLine($"    \"{kv.Key}\": r\"{pyPath}\",");
             }
             sb.AppendLine("}");
 
@@ -190,83 +350,31 @@ namespace BIS.P3D.Export
         {
             writer.WriteLine("def resolve_tex(tex_ref, rvmat_dir=None):");
             writer.WriteLine("    tex_ref_clean = tex_ref.replace('\\\\', '/')");
-            writer.WriteLine("    # Strip existing extension first, then try PAA then PNG");
-            writer.WriteLine("    without_ext = tex_ref_clean[:-4] if tex_ref_clean.lower().endswith(('.paa', '.png')) else tex_ref_clean");
-            writer.WriteLine("    # First: use rvmat directory context to resolve the correct texture");
-            writer.WriteLine("    # (different directories can have same-named files with different content)");
+            writer.WriteLine("    without_ext = os.path.splitext(tex_ref_clean)[0]");
             writer.WriteLine("    if rvmat_dir:");
-            writer.WriteLine("        for ext in ['.paa', '.png']:");
-            writer.WriteLine("            full_key = f\"{rvmat_dir}/{without_ext}{ext}\".lower()");
-            writer.WriteLine("            if full_key in image_dict:");
-            writer.WriteLine("                return image_dict[full_key]");
-            writer.WriteLine("    # Fallback: basename lookup");
-            writer.WriteLine("    for ext in ['.paa', '.png']:");
-            writer.WriteLine("        key = without_ext + ext");
-            writer.WriteLine("        basename = os.path.basename(key).lower()");
-            writer.WriteLine("        if basename in image_dict:");
-            writer.WriteLine("            return image_dict[basename]");
+            writer.WriteLine("        full_key = f\"{rvmat_dir}/{without_ext}.png\".lower()");
+            writer.WriteLine("        if full_key in image_dict:");
+            writer.WriteLine("            return image_dict[full_key]");
+            writer.WriteLine("    basename = os.path.basename(without_ext) + '.png'");
+            writer.WriteLine("    if basename.lower() in image_dict:");
+            writer.WriteLine("        return image_dict[basename.lower()]");
             writer.WriteLine("    return None");
             writer.WriteLine();
 
-            writer.WriteLine("def load_image_pil(path, img_name):");
-            writer.WriteLine("    from PIL import Image");
-            writer.WriteLine("    import numpy as np");
-            writer.WriteLine("    pil_img = Image.open(path).convert('RGBA')");
-            writer.WriteLine("    width, height = pil_img.size");
-            writer.WriteLine("    pixels = np.array(pil_img).astype(float) / 255.0");
-            writer.WriteLine("    # Flip rows: Blender expects bottom-to-top, PIL gives top-to-bottom");
-            writer.WriteLine("    pixels = np.flip(pixels, axis=0)");
-            writer.WriteLine("    img = bpy.data.images.new(img_name, width=width, height=height, alpha=True)");
-            writer.WriteLine("    img.pixels = pixels.flatten().tolist()");
-            writer.WriteLine("    img.pack()");
-            writer.WriteLine("    return img, width, height");
-            writer.WriteLine();
-            writer.WriteLine("def load_image(path, source_type):");
-            writer.WriteLine("    # Rename stale image first to avoid basename collision");
-            writer.WriteLine("    # (different directories can have same-named textures with different content)");
+            writer.WriteLine("def load_image(path):");
             writer.WriteLine("    img_name = os.path.basename(path)");
             writer.WriteLine("    old = bpy.data.images.get(img_name)");
             writer.WriteLine("    if old:");
             writer.WriteLine("        old.name = f\"__old_{img_name}\"");
             writer.WriteLine("    try:");
-            writer.WriteLine("        if source_type == 'PAA':");
-            writer.WriteLine("            # Fast PAA decode via armaio (avoids ~4.5s a3ob.import_paa overhead)");
-            writer.WriteLine("            from armaio.paa.pillow import open_paa_image");
-            writer.WriteLine("            pil_img = open_paa_image(path)");
-            writer.WriteLine("            width, height = pil_img.size");
-            writer.WriteLine("            import numpy as np");
-            writer.WriteLine("            pixels = np.array(pil_img).astype(float) / 255.0");
-            writer.WriteLine("            pixels = np.flip(pixels, axis=0)");
-            writer.WriteLine("            img = bpy.data.images.new(img_name, width=width, height=height, alpha=True)");
-            writer.WriteLine("            img.pixels = pixels.flatten().tolist()");
+            writer.WriteLine("        img = bpy.data.images.load(path)");
+            writer.WriteLine("        if not img.has_data:");
             writer.WriteLine("            img.pack()");
-            writer.WriteLine("            print(f\"[BIS]   Packed {img_name} via armaio ({width}x{height})\", flush=True)");
-            writer.WriteLine("            return img");
-            writer.WriteLine("        else:");
-            writer.WriteLine("            # PNG via PIL");
-            writer.WriteLine("            img, width, height = load_image_pil(path, img_name)");
-            writer.WriteLine("            print(f\"[BIS]   Packed {img_name} via PIL ({width}x{height})\", flush=True)");
-            writer.WriteLine("            return img");
+            writer.WriteLine("        print(f\"[BIS]   Loaded {img_name}\", flush=True)");
+            writer.WriteLine("        return img");
             writer.WriteLine("    except Exception as e:");
-            writer.WriteLine("        print(f\"[BIS]   {source_type} load failed for {path}: {e}\", flush=True)");
-            writer.WriteLine("        # Fallback: a3ob.import_paa or blender native load");
-            writer.WriteLine("        if source_type == 'PAA':");
-            writer.WriteLine("            try:");
-            writer.WriteLine("                bpy.ops.a3ob.import_paa(filepath=path)");
-            writer.WriteLine("                img = bpy.data.images.get(img_name)");
-            writer.WriteLine("                if img and hasattr(img, 'filepath_raw'):");
-            writer.WriteLine("                    img.filepath_raw = path");
-            writer.WriteLine("                return img");
-            writer.WriteLine("            except Exception:");
-            writer.WriteLine("                return None");
-            writer.WriteLine("        else:");
-            writer.WriteLine("            try:");
-            writer.WriteLine("                img = bpy.data.images.load(path)");
-            writer.WriteLine("                if not img.has_data:");
-            writer.WriteLine("                    img.pack()");
-            writer.WriteLine("                return img");
-            writer.WriteLine("            except Exception:");
-            writer.WriteLine("                return None");
+            writer.WriteLine("        print(f\"[BIS]   Failed to load {path}: {e}\", flush=True)");
+            writer.WriteLine("        return None");
             writer.WriteLine();
 
             writer.WriteLine("def assign_texture(material, color_ref):");
@@ -289,13 +397,12 @@ namespace BIS.P3D.Export
             writer.WriteLine("    except:");
             writer.WriteLine("        pass");
             writer.WriteLine();
-            writer.WriteLine("    result = resolve_tex(color_ref, rvmat_dir)");
-            writer.WriteLine("    if not result:");
+            writer.WriteLine("    tex_path = resolve_tex(color_ref, rvmat_dir)");
+            writer.WriteLine("    if not tex_path:");
             writer.WriteLine("        print(f\"[BIS]   Texture not found: {color_ref}\", flush=True)");
             writer.WriteLine("        return");
-            writer.WriteLine("    tex_path, tex_type = result");
             writer.WriteLine();
-            writer.WriteLine("    img = load_image(tex_path, tex_type)");
+            writer.WriteLine("    img = load_image(tex_path)");
             writer.WriteLine("    if not img:");
             writer.WriteLine("        print(f\"[BIS]   Failed to load: {tex_path}\", flush=True)");
             writer.WriteLine("        return");
@@ -316,13 +423,17 @@ namespace BIS.P3D.Export
             writer.WriteLine();
 
             // Per-model import + PBR + save block
-            writer.WriteLine("def import_and_save_model(p3d_path, model_name, output_dir, model_cfg_path):");
-            writer.WriteLine("    # Clear everything from previous model");
+            writer.WriteLine("def import_and_save_model(p3d_path, model_name, output_dir, model_cfg_path, sel_map=None):");
+            writer.WriteLine("    # Clear everything from previous model (objects, images, collections)");
             writer.WriteLine("    bpy.ops.object.select_all(action='SELECT')");
             writer.WriteLine("    bpy.ops.object.delete()");
-            writer.WriteLine("    # Clear images to free memory");
             writer.WriteLine("    for img in list(bpy.data.images):");
             writer.WriteLine("        bpy.data.images.remove(img)");
+            writer.WriteLine("    # Remove stale collections (keep master scene collection)");
+            writer.WriteLine("    master = bpy.context.scene.collection");
+            writer.WriteLine("    for coll in list(bpy.data.collections):");
+            writer.WriteLine("        if coll != master and coll.name != 'Collection':");
+            writer.WriteLine("            bpy.data.collections.remove(coll, do_unlink=True)");
             writer.WriteLine();
             writer.WriteLine("    try:");
             writer.WriteLine("        bpy.ops.a3ob.import_p3d(filepath=p3d_path,");
@@ -379,18 +490,131 @@ namespace BIS.P3D.Export
             writer.WriteLine("            tex_count += 1");
             writer.WriteLine("    print(f\"[BIS] Textured {tex_count} material(s)\", flush=True)");
             writer.WriteLine();
+            writer.WriteLine();
             writer.WriteLine("    # Separate mesh by material to create per-component objects");
+            writer.WriteLine("    # (process each mesh individually to avoid view-layer issues)");
             writer.WriteLine("    print(f\"[BIS] Separating by material...\", flush=True)");
-            writer.WriteLine("    bpy.ops.object.select_all(action='DESELECT')");
-            writer.WriteLine("    for obj in bpy.data.objects:");
-            writer.WriteLine("        if obj.type == 'MESH':");
+            writer.WriteLine("    for obj in list(bpy.data.objects):");
+            writer.WriteLine("        if obj.type != 'MESH' or len(obj.material_slots) <= 1:");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        try:");
+            writer.WriteLine("            bpy.ops.object.select_all(action='DESELECT')");
+            writer.WriteLine("            obj.hide_set(False)");
             writer.WriteLine("            obj.select_set(True)");
-            writer.WriteLine("    if bpy.context.selected_objects:");
-            writer.WriteLine("        bpy.context.view_layer.objects.active = bpy.context.selected_objects[0]");
-            writer.WriteLine("        bpy.ops.object.mode_set(mode='EDIT')");
-            writer.WriteLine("        bpy.ops.mesh.select_all(action='SELECT')");
-            writer.WriteLine("        bpy.ops.mesh.separate(type='MATERIAL')");
-            writer.WriteLine("        bpy.ops.object.mode_set(mode='OBJECT')");
+            writer.WriteLine("            bpy.context.view_layer.objects.active = obj");
+            writer.WriteLine("            bpy.ops.object.mode_set(mode='EDIT')");
+            writer.WriteLine("            bpy.ops.mesh.select_all(action='SELECT')");
+            writer.WriteLine("            bpy.ops.mesh.separate(type='MATERIAL')");
+            writer.WriteLine("            bpy.ops.object.mode_set(mode='OBJECT')");
+            writer.WriteLine("        except Exception as e:");
+            writer.WriteLine("            print(f\"[BIS]   Skip separate for {obj.name}: {e}\", flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("    # ─── Naming helpers ───");
+            writer.WriteLine("    import re as _re");
+            writer.WriteLine("    _brand_prefixes = ['jsoar_', 'adams_', 'avs_', 'sma_', 'cwr_', 'rhs_', 'cup_', 'ace_', 'cba_', 'ifa_', 'uns_', 'vg_', 'tfa_', 'uksf_', 'niarms_', 'vsm_', 'mec_', 'task_']");
+            writer.WriteLine("    def _strip_brand(n):");
+            writer.WriteLine("        low = n.lower()");
+            writer.WriteLine("        for p in _brand_prefixes:");
+            writer.WriteLine("            if low.startswith(p):");
+            writer.WriteLine("                return n[len(p):]");
+            writer.WriteLine("        return n");
+            writer.WriteLine("    def _contract_variant(part):");
+            writer.WriteLine("        return _re.sub(r'_(?=\\d)', '', part)");
+            writer.WriteLine("    raw_variant = _strip_brand(model_name)");
+            writer.WriteLine("    variant = _contract_variant(raw_variant)");
+            writer.WriteLine();
+            writer.WriteLine("    # ─── LOD type helper ───");
+            writer.WriteLine("    _lod_tags = {");
+            writer.WriteLine("        'View - Pilot': 'VP',");
+            writer.WriteLine("        'View - Cargo': 'VC',");
+            writer.WriteLine("        'View - Commander': 'VCOM',");
+            writer.WriteLine("        'View - Gunner': 'VG',");
+            writer.WriteLine("        'View - Pilot - Interior': 'VPI',");
+            writer.WriteLine("        'Resolution 0': 'R0',");
+            writer.WriteLine("        'Resolution 1': 'R1',");
+            writer.WriteLine("        'Resolution 2': 'R2',");
+            writer.WriteLine("        'Resolution 3': 'R3',");
+            writer.WriteLine("        'ShadowVolume': 'SV',");
+            writer.WriteLine("        'ShadowVolumeNonSelf': 'SVN',");
+            writer.WriteLine("        'Geometry': 'GEO',");
+            writer.WriteLine("        'GeometryInterior': 'GEOI',");
+            writer.WriteLine("        'GeometryInteriorCollision': 'GEOIC',");
+            writer.WriteLine("        'HitPoints': 'HP',");
+            writer.WriteLine("        'PhysX': 'PHY',");
+            writer.WriteLine("        'FireGeometry': 'FG',");
+            writer.WriteLine("        'LandContact': 'LC',");
+            writer.WriteLine("        'Roadway': 'RW',");
+            writer.WriteLine("        'Wreck': 'WRK',");
+            writer.WriteLine("        # Numeric A3OB LOD enum identifiers (actual values from a3ob_properties_object.lod)");
+            writer.WriteLine("        '0': 'R0',");
+            writer.WriteLine("        '1': 'VG',");
+            writer.WriteLine("        '2': 'VP',");
+            writer.WriteLine("        '3': 'VC',");
+            writer.WriteLine("        '4': 'SV',");
+            writer.WriteLine("        '5': 'EDIT',");
+            writer.WriteLine("        '6': 'GEO',");
+            writer.WriteLine("        '7': 'GEOB',");
+            writer.WriteLine("        '8': 'GEOP',");
+            writer.WriteLine("        '9': 'MEM',");
+            writer.WriteLine("        '10': 'LC',");
+            writer.WriteLine("        '11': 'RW',");
+            writer.WriteLine("        '12': 'PATH',");
+            writer.WriteLine("        '13': 'HP',");
+            writer.WriteLine("        '14': 'VWG',");
+            writer.WriteLine("        '15': 'FG',");
+            writer.WriteLine("        '16': 'VCG',");
+            writer.WriteLine("        '17': 'VCFG',");
+            writer.WriteLine("        '18': 'VCOM',");
+            writer.WriteLine("        '19': 'VCOMG',");
+            writer.WriteLine("        '20': 'VCOMFG',");
+            writer.WriteLine("        '21': 'VPG',");
+            writer.WriteLine("        '22': 'VPFG',");
+            writer.WriteLine("        '23': 'VGG',");
+            writer.WriteLine("        '24': 'VGFG',");
+            writer.WriteLine("        '25': 'SUB',");
+            writer.WriteLine("        '26': 'SVC',");
+            writer.WriteLine("        '27': 'SVP',");
+            writer.WriteLine("        '28': 'SVG',");
+            writer.WriteLine("        '29': 'WRK',");
+            writer.WriteLine("        '30': 'UG',");
+            writer.WriteLine("        '31': 'GL',");
+            writer.WriteLine("        '32': 'NAV',");
+            writer.WriteLine("    }");
+            writer.WriteLine("    # Map A3OB LOD enum values to parent collection name (view/shadow_volume/geometry)");
+            writer.WriteLine("    _lod_groups = {");
+            writer.WriteLine("        '0': 'view', '1': 'view', '2': 'view', '3': 'view', '18': 'view',");
+            writer.WriteLine("        '4': 'shadow_volume', '26': 'shadow_volume', '27': 'shadow_volume', '28': 'shadow_volume',");
+            writer.WriteLine("        '6': 'geometry', '7': 'geometry', '8': 'geometry', '14': 'geometry',");
+            writer.WriteLine("        '15': 'geometry', '16': 'geometry', '17': 'geometry', '19': 'geometry',");
+            writer.WriteLine("        '20': 'geometry', '21': 'geometry', '22': 'geometry', '23': 'geometry',");
+            writer.WriteLine("        '24': 'geometry', '30': 'geometry',");
+            writer.WriteLine("    }");
+            writer.WriteLine("    def _lod_tag(obj):");
+            writer.WriteLine("        try:");
+            writer.WriteLine("            lod_name = str(obj.a3ob_properties_object.lod)");
+            writer.WriteLine("        except:");
+            writer.WriteLine("            lod_name = None");
+            writer.WriteLine("        if not lod_name:");
+            writer.WriteLine("            return ''");
+            writer.WriteLine("        # Priority 1: A3OB lod name -> compact tag (e.g. '0' -> 'R0', '2' -> 'VP')");
+            writer.WriteLine("        tag = _lod_tags.get(lod_name)");
+            writer.WriteLine("        if tag:");
+            writer.WriteLine("            return f'_{tag}'");
+            writer.WriteLine("        # Priority 2: parent collection name as fallback");
+            writer.WriteLine("        for coll in obj.users_collection:");
+            writer.WriteLine("            cname = coll.name");
+            writer.WriteLine("            if cname in ('view','shadow_volume','geometry'):");
+            writer.WriteLine("                return f'_{cname}'");
+            writer.WriteLine("        # Priority 3: shorten the raw lod name");
+            writer.WriteLine("        short = lod_name.replace(' ', '').replace('-','')[:8]");
+            writer.WriteLine("        if short:");
+            writer.WriteLine("            return f'_{short}'");
+            writer.WriteLine("        return ''");
+            writer.WriteLine("    def _lod_group(lod_name):");
+            writer.WriteLine("        \"\"\"Map A3OB LOD enum value to parent collection name.\"\"\"");
+            writer.WriteLine("        if not lod_name:");
+            writer.WriteLine("            return None");
+            writer.WriteLine("        return _lod_groups.get(str(lod_name))");
             writer.WriteLine();
             writer.WriteLine("    # Rename objects based on material and move proxies to separate collection");
             writer.WriteLine("    proxy_coll = next((c for c in bpy.data.collections if c.name == 'Proxies'), None)");
@@ -404,56 +628,172 @@ namespace BIS.P3D.Export
             writer.WriteLine("        if not obj.material_slots or not obj.material_slots[0].material:");
             writer.WriteLine("            continue");
             writer.WriteLine();
-            writer.WriteLine("        mat = obj.material_slots[0].material");
-            writer.WriteLine("        is_proxy = False");
+            writer.WriteLine("        try:");
+            writer.WriteLine("            mat = obj.material_slots[0].material");
+            writer.WriteLine("            is_proxy = False");
             writer.WriteLine();
-            writer.WriteLine("        if mat.name.startswith('P3D: '):");
-            writer.WriteLine("            if 'no material' in mat.name.lower():");
-            writer.WriteLine("                is_proxy = True");
-            writer.WriteLine("            elif ' :: ' in mat.name:");
-            writer.WriteLine("                parts = mat.name.split(' :: ', 1)");
-            writer.WriteLine("                color_ref = parts[0].replace('P3D: ', '').strip()");
-            writer.WriteLine("                tex_name = os.path.splitext(os.path.basename(color_ref))[0]");
-            writer.WriteLine();
-            writer.WriteLine("                # Check for proxy keywords in texture name");
-            writer.WriteLine("                tex_lower = tex_name.lower()");
-            writer.WriteLine("                if any(kw in tex_lower for kw in ['proxy', 'pilot']):");
+            writer.WriteLine("            if mat.name.startswith('P3D: '):");
+            writer.WriteLine("                if 'no material' in mat.name.lower():");
             writer.WriteLine("                    is_proxy = True");
+            writer.WriteLine("                elif ' :: ' in mat.name:");
+            writer.WriteLine("                    parts = mat.name.split(' :: ', 1)");
+            writer.WriteLine("                    color_ref = parts[0].replace('P3D: ', '').strip()");
+            writer.WriteLine("                    tex_name = os.path.splitext(ntpath.basename(color_ref))[0]");
             writer.WriteLine();
-            writer.WriteLine("                if not is_proxy:");
-            writer.WriteLine("                    # Clean common Arma texture suffixes for readable naming");
-            writer.WriteLine("                    clean = tex_name");
-            writer.WriteLine("                    for sfx in ['_co', '_nohq', '_nopx', '_ca', '_gs', '_mco', '_s', '_as']:");
-            writer.WriteLine("                        if clean.endswith(sfx):");
-            writer.WriteLine("                            clean = clean[:-len(sfx)]");
-            writer.WriteLine("                            break");
+            writer.WriteLine("                    # Check for proxy keywords in texture name");
+            writer.WriteLine("                    tex_lower = tex_name.lower()");
+            writer.WriteLine("                    if any(kw in tex_lower for kw in ['proxy', 'pilot']):");
+            writer.WriteLine("                        is_proxy = True");
             writer.WriteLine();
-            writer.WriteLine("                    # Strip obfuscated prefix (leading numbers / short codes)");
-            writer.WriteLine("                    if '_' in clean:");
-            writer.WriteLine("                        parts = clean.split('_', 1)");
-            writer.WriteLine("                        if parts[0].isdigit() or len(parts[0]) <= 3:");
-            writer.WriteLine("                            clean = parts[1]");
+            writer.WriteLine("                    if not is_proxy:");
+                        writer.WriteLine("                        # Priority 1: Named selection mapping (from P3D selections)");
+                        writer.WriteLine("                        try:");
+                        writer.WriteLine("                            rv_path = mat.a3ob_properties_material.material_path");
+                        writer.WriteLine("                            if rv_path and sel_map:");
+                        writer.WriteLine("                                rv_key = rv_path.replace('\\\\', '/').lower()");
+                        writer.WriteLine("                                sel_name = sel_map.get(rv_key)");
+                        writer.WriteLine("                                # Fallback: filename-only match (P3D may store just filename)");
+                        writer.WriteLine("                                if not sel_name:");
+                        writer.WriteLine("                                    import os as _os");
+                        writer.WriteLine("                                    rv_base = _os.path.basename(rv_key).lower()");
+                        writer.WriteLine("                                    for _k, _v in sel_map.items():");
+                        writer.WriteLine("                                        if _k.endswith('/' + rv_base) or _k == rv_base:");
+                        writer.WriteLine("                                            sel_name = _v");
+                        writer.WriteLine("                                            break");
+                        writer.WriteLine("                                if sel_name:");
+                        writer.WriteLine("                                    obj.name = f'{sel_name}_{variant}{_lod_tag(obj)}'");
+                        writer.WriteLine("                                    print(f\"[BIS]   Named '{obj.name}' from selection ({sel_name})\", flush=True)");
+                        writer.WriteLine("                                    continue");
+                        writer.WriteLine("                        except:");
+                        writer.WriteLine("                            pass");
+            writer.WriteLine("                        # Priority 2: RVMAT directory (e.g., data\\mags\\mags.rvmat -> mags)");
+            writer.WriteLine("                        try:");
+            writer.WriteLine("                            rv_path = mat.a3ob_properties_material.material_path");
+            writer.WriteLine("                            if rv_path:");
+            writer.WriteLine("                                # ntpath imported at top of script");
+            writer.WriteLine("                                rv_dir = ntpath.dirname(rv_path).replace('\\\\', '/')");
+            writer.WriteLine("                                rv_dir_name = rv_dir.split('/')[-1]");
+            writer.WriteLine("                                if rv_dir_name and rv_dir_name != 'data' and rv_dir_name != 'textures' and rv_dir_name != _strip_brand(model_name) and rv_dir_name != 'model' and rv_dir_name != 'models':");
+            writer.WriteLine("                                    clean = rv_dir_name.replace(' ', '_')");
+            writer.WriteLine("                                    part_name = _strip_brand(clean)");
+            writer.WriteLine("                                    obj.name = f'{part_name}_{variant}{_lod_tag(obj)}'");
+            writer.WriteLine("                                    print(f\"[BIS]   Named '{obj.name}' from rvmat dir ({rv_dir_name})\", flush=True)");
+            writer.WriteLine("                                    continue");
+            writer.WriteLine("                        except:");
+            writer.WriteLine("                            pass");
+            writer.WriteLine("                        # Priority 3: procedural texture (e.g., #(argb,...)) - use rvmat filename or index");
+            writer.WriteLine("                        try:");
+            writer.WriteLine("                            if tex_name.startswith('#('):");
+            writer.WriteLine("                                rv_path = mat.a3ob_properties_material.material_path");
+            writer.WriteLine("                                if rv_path:");
+            writer.WriteLine("                                    # ntpath imported at top of script");
+            writer.WriteLine("                                    rv_base = ntpath.basename(rv_path)");
+            writer.WriteLine("                                    rv_name = os.path.splitext(rv_base)[0]");
+            writer.WriteLine("                                    if rv_name and rv_name != 'model' and rv_name != _strip_brand(model_name):");
+            writer.WriteLine("                                        clean = _strip_brand(rv_name)");
+            writer.WriteLine("                                        obj.name = f'{clean}_{variant}{_lod_tag(obj)}'");
+            writer.WriteLine("                                        print(f\"[BIS]   Named '{obj.name}' from procedural tex ({tex_name[:30]}...)\", flush=True)");
+            writer.WriteLine("                                        continue");
+            writer.WriteLine("                                # Last resort: material index");
+            writer.WriteLine("                                from bpy import data as _data");
+            writer.WriteLine("                                mat_idx = list(_data.materials).index(mat)");
+            writer.WriteLine("                                obj.name = f'color_{mat_idx}_{variant}{_lod_tag(obj)}'");
+            writer.WriteLine("                                print(f\"[BIS]   Named '{obj.name}' from procedural tex index ({tex_name[:30]}...)\", flush=True)");
+            writer.WriteLine("                                continue");
+            writer.WriteLine("                        except:");
+            writer.WriteLine("                            pass");
+            writer.WriteLine("                        # Fallback: texture name");
+            writer.WriteLine("                        try:");
+            writer.WriteLine("                            clean = tex_name");
+            writer.WriteLine("                            if not clean:");
+            writer.WriteLine("                                # Empty texture - fall back to rvmat filename");
+            writer.WriteLine("                                try:");
+            writer.WriteLine("                                    rv_path = mat.a3ob_properties_material.material_path");
+            writer.WriteLine("                                    if rv_path:");
+            writer.WriteLine("                                        clean = os.path.splitext(ntpath.basename(rv_path))[0]");
+            writer.WriteLine("                                except:");
+            writer.WriteLine("                                    pass");
+            writer.WriteLine("                            for sfx in ['_co', '_nohq', '_nopx', '_ca', '_gs', '_mco', '_s', '_as']:");
+            writer.WriteLine("                                if clean.endswith(sfx):");
+            writer.WriteLine("                                    clean = clean[:-len(sfx)]");
+            writer.WriteLine("                                    break");
+            writer.WriteLine("                            if '_' in clean:");
+            writer.WriteLine("                                parts = clean.split('_', 1)");
+            writer.WriteLine("                                if parts[0].isdigit() or len(parts[0]) <= 3:");
+            writer.WriteLine("                                    clean = parts[1]");
+            writer.WriteLine("                            # Strip Blender auto-suffix");
+            writer.WriteLine("                            base = obj.name");
+            writer.WriteLine("                            if '.' in base and base.rsplit('.', 1)[1].isdigit():");
+            writer.WriteLine("                                base = base.rsplit('.', 1)[0]");
+            writer.WriteLine("                            obj.name = f'{clean}_{variant}{_lod_tag(obj)}'");
+            writer.WriteLine("                            print(f\"[BIS]   Named '{obj.name}' from texture fallback\", flush=True)");
+            writer.WriteLine("                        except Exception as _ne:");
+            writer.WriteLine("                            print(f\"[BIS]   Could not name {obj.name}: {_ne}\", flush=True)");
+            writer.WriteLine("            else:");
+            writer.WriteLine("                # Non-P3D materials are typically proxies/helpers");
+            writer.WriteLine("                is_proxy = True");
             writer.WriteLine();
-            writer.WriteLine("                    # Strip Blender auto-suffix (e.g. '.001')");
-            writer.WriteLine("                    base = obj.name");
-            writer.WriteLine("                    if '.' in base and base.rsplit('.', 1)[1].isdigit():");
-            writer.WriteLine("                        base = base.rsplit('.', 1)[0]");
-            writer.WriteLine();
-            writer.WriteLine("                    # Name: {model_name}_{component} — clean, scoped by model");
-            writer.WriteLine("                    obj.name = f'{model_name}_{clean}'");
-            writer.WriteLine("        else:");
-            writer.WriteLine("            # Non-P3D materials are typically proxies/helpers");
-            writer.WriteLine("            is_proxy = True");
-            writer.WriteLine();
-            writer.WriteLine("        if is_proxy:");
-            writer.WriteLine("            for coll in bpy.data.collections:");
-            writer.WriteLine("                if obj.name in coll.objects:");
-            writer.WriteLine("                    coll.objects.unlink(obj)");
-            writer.WriteLine("            proxy_coll.objects.link(obj)");
+            writer.WriteLine("            if is_proxy:");
+            writer.WriteLine("                for coll in bpy.data.collections:");
+            writer.WriteLine("                    if obj.name in coll.objects:");
+            writer.WriteLine("                        coll.objects.unlink(obj)");
+            writer.WriteLine("                proxy_coll.objects.link(obj)");
+            writer.WriteLine("        except Exception as _loop_err:");
+            writer.WriteLine("            print(f\"[BIS]   Error processing {obj.name}: {_loop_err}\", flush=True)");
             writer.WriteLine();
             writer.WriteLine("    obj_count = len([o for o in bpy.data.objects if o.type == 'MESH'])");
             writer.WriteLine("    proxy_count = len([o for o in proxy_coll.objects if o.type == 'MESH'])");
             writer.WriteLine("    print(f'[BIS] Organized {obj_count} objects ({proxy_count} proxies in Proxies)', flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("    # ─── LOD sub-collections ───");
+            writer.WriteLine("    # Organize mesh objects into LOD-specific sub-collections");
+            writer.WriteLine("    # e.g. view_R0, view_VP for Resolution 0 and View - Pilot");
+            writer.WriteLine("    # Uses A3OB LOD enum value to determine parent group, since material");
+            writer.WriteLine("    # separation may have moved objects out of their type collections.");
+            writer.WriteLine("    lod_colls = {}");
+            writer.WriteLine("    for obj in list(bpy.data.objects):");
+            writer.WriteLine("        if obj.type != 'MESH':");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        if obj.name in proxy_coll.objects:");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        lod_tag = _lod_tag(obj)");
+            writer.WriteLine("        if not lod_tag:");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        # Determine parent group from A3OB LOD enum value");
+            writer.WriteLine("        try:");
+            writer.WriteLine("            obj_lod = obj.a3ob_properties_object.lod");
+            writer.WriteLine("        except:");
+            writer.WriteLine("            obj_lod = None");
+            writer.WriteLine("        parent_name = _lod_group(obj_lod)");
+            writer.WriteLine("        if parent_name is None:");
+            writer.WriteLine("            # Fallback: use object's current collection name");
+            writer.WriteLine("            for coll in obj.users_collection:");
+            writer.WriteLine("                cname = coll.name");
+            writer.WriteLine("                if cname in ('view','shadow_volume','geometry'):");
+            writer.WriteLine("                    parent_name = cname");
+            writer.WriteLine("                    break");
+            writer.WriteLine("        if parent_name is None:");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        # Find or create the parent collection");
+            writer.WriteLine("        parent_coll = bpy.data.collections.get(parent_name)");
+            writer.WriteLine("        if parent_coll is None:");
+            writer.WriteLine("            parent_coll = bpy.data.collections.new(parent_name)");
+            writer.WriteLine("            bpy.context.scene.collection.children.link(parent_coll)");
+            writer.WriteLine("        sub_name = parent_name + lod_tag");
+            writer.WriteLine("        if sub_name not in lod_colls:");
+            writer.WriteLine("            sub = bpy.data.collections.new(sub_name)");
+            writer.WriteLine("            parent_coll.children.link(sub)");
+            writer.WriteLine("            lod_colls[sub_name] = sub");
+            writer.WriteLine("        # Move object to LOD sub-collection");
+            writer.WriteLine("        # Unlink from parent collection (leave scene collection intact)");
+            writer.WriteLine("        for coll in list(obj.users_collection):");
+            writer.WriteLine("            if coll.name == parent_name:");
+            writer.WriteLine("                coll.objects.unlink(obj)");
+            writer.WriteLine("                break");
+            writer.WriteLine("        lod_colls[sub_name].objects.link(obj)");
+            writer.WriteLine("    if lod_colls:");
+            writer.WriteLine("        names = sorted(lod_colls.keys())");
+            writer.WriteLine("        print(f'[BIS] LOD collections: {names}', flush=True)");
             if (modelCfgPath != null)
             {
                 writer.WriteLine("    # Skeleton / armature");
@@ -523,8 +863,9 @@ namespace BIS.P3D.Export
             }
             writer.WriteLine("    # ─── Scene cleanup & setup ───");
             writer.WriteLine("    # Delete empty LOD collections left after separation");
+            writer.WriteLine("    # (but keep collections that have children, e.g. view->view_R0)");
             writer.WriteLine("    for coll in list(bpy.data.collections):");
-            writer.WriteLine("        if coll.name not in ('LODs', 'Proxies') and len(coll.objects) == 0:");
+            writer.WriteLine("        if coll.name not in ('LODs', 'Proxies') and len(coll.objects) == 0 and len(coll.children) == 0:");
             writer.WriteLine("            bpy.data.collections.remove(coll)");
             writer.WriteLine("    # Delete default Blender startup objects if present");
             writer.WriteLine("    for obj in list(bpy.data.objects):");
@@ -557,8 +898,9 @@ namespace BIS.P3D.Export
 
             using var writer = new StreamWriter(scriptPath);
             writer.WriteLine("import bpy");
-            writer.WriteLine("import os");
-            writer.WriteLine("import sys");
+writer.WriteLine("import os");
+writer.WriteLine("import ntpath");
+writer.WriteLine("import sys");
             writer.WriteLine("import traceback");
             writer.WriteLine();
 
@@ -578,7 +920,8 @@ namespace BIS.P3D.Export
             {
                 string pyP3DPath = p3dPath.Replace("\\", "/");
                 string pyOutDir = outputDir.Replace("\\", "/");
-                writer.WriteLine($"import_and_save_model(r\"{pyP3DPath}\", \"{modelName}\", r\"{pyOutDir}\", { (modelCfgPath != null ? "r\"" + modelCfgPath.Replace("\\", "/") + "\"" : "None") })");
+                string selMap = BuildSelectionMapLiteral(p3dPath);
+                writer.WriteLine($"import_and_save_model(r\"{pyP3DPath}\", \"{modelName}\", r\"{pyOutDir}\", {(modelCfgPath != null ? "r\"" + modelCfgPath.Replace("\\", "/") + "\"" : "None")}, {selMap})");
             }
 
             return scriptPath;
@@ -601,16 +944,12 @@ namespace BIS.P3D.Export
             var allP3Ds = Directory.GetFiles(extractedDir, "*.p3d", SearchOption.AllDirectories);
             var validModels = new List<(string Name, string Path)>();  // Renamed to avoid member name conflict
 
-            // Filter out models with empty LODs (addon hangs)
+            // Sanitize models with empty View-Pilot LODs that cause A3OB to hang
             foreach (var p3dPath in allP3Ds)
             {
                 string modelName = Path.GetFileNameWithoutExtension(p3dPath);
-                if (HasEmptyLods(p3dPath))
-                {
-                    Console.WriteLine($"  Skipping {modelName}: has empty view LOD (addon hangs)");
-                    continue;
-                }
-                validModels.Add((modelName, p3dPath));
+                string importPath = HasEmptyViewLod(p3dPath) ? SanitizeP3D(p3dPath) : p3dPath;
+                validModels.Add((modelName, importPath));
             }
 
             if (validModels.Count == 0)

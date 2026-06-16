@@ -14,7 +14,7 @@ internal static class BlenderHelper
     /// Generates batch Blender scripts and runs them concurrently.
     /// PAA textures are pre-converted to PNG in C# so Blender loads them natively.
     /// </summary>
-    public static async Task<int> ExportAsync(string extractedDir, string outputDir)
+    public static async Task<int> ExportAsync(string extractedDir, string outputDir, string? modelCfgPath = null)
     {
         // Resolve to absolute paths so GetRelativePath works correctly (Uri requires absolute paths)
         extractedDir = Path.GetFullPath(extractedDir);
@@ -26,7 +26,7 @@ internal static class BlenderHelper
         // Generate batch scripts (each handles multiple models in a single Blender session)
         int cpuCount = Environment.ProcessorCount;
         int concurrency = Math.Clamp(cpuCount / 2, 2, 4); // 2-4 concurrent Blender processes
-        var batchScripts = BlenderExport.GenerateAllBatchScripts(extractedDir, outputDir, texturesDir, concurrency);
+        var batchScripts = BlenderExport.GenerateAllBatchScripts(extractedDir, outputDir, texturesDir, concurrency, modelCfgPath);
 
         if (batchScripts.Count == 0)
         {

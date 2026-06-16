@@ -1,21 +1,257 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace BIS.P3D.Export
 {
     public static class RetextureExport
     {
         /// <summary>
-        /// Generates a Blender Python script for re-texturing a P3D model.
-        /// The script imports the model, applies the remap (supports exact,
-        /// prefix, and suffix pattern matching), and re-exports.
+        /// Generates a Blender Python script for re-texturing a batch of P3D models.
+        /// All models are processed in a single Blender session, importing each,
+        /// applying the remap, re-exporting, and cleaning up between models.
         /// </summary>
-        /// <param name="modelPath">Path to source .p3d</param>
-        /// <param name="remapPath">Path to JSON remap config</param>
-        /// <param name="outputPath">Output .p3d path</param>
-        /// <param name="textureDir">Optional path to load PAA textures from (uses armaio)</param>
-        /// <param name="lodFilter">Optional LOD type filter: "view", "shadow", "geometry", or null for all</param>
-        /// <returns>Path to the generated script</returns>
+        public static string GenerateBatchRetextureScript(
+            List<(string ModelPath, string OutputPath)> models,
+            string remapPath, string? textureDir = null, string? lodFilter = null)
+        {
+            string remapJson = File.ReadAllText(remapPath);
+            string scriptDir = Path.GetDirectoryName(models[0].OutputPath) ?? ".";
+            string scriptPath = Path.Combine(scriptDir, "retex_batch.py");
+
+            using var writer = new StreamWriter(scriptPath);
+            writer.WriteLine("import bpy");
+            writer.WriteLine("import json");
+            writer.WriteLine("import os");
+            writer.WriteLine("import sys");
+            writer.WriteLine("import traceback");
+            writer.WriteLine();
+
+            writer.WriteLine("# Enable a3ob addon");
+            writer.WriteLine("bpy.ops.preferences.addon_enable(module=\"bl_ext.blender_org.Arma3ObjectBuilder\")");
+            writer.WriteLine();
+
+            var modelEntries = models.Select(m =>
+            {
+                string mp = m.ModelPath.Replace("\\", "/");
+                string op = m.OutputPath.Replace("\\", "/");
+                return $"    (r\"{mp}\", r\"{op}\")";
+            });
+            writer.WriteLine("models = [");
+            writer.WriteLine(string.Join(",\n", modelEntries));
+            writer.WriteLine("]");
+            writer.WriteLine();
+
+            writer.WriteLine("# Texture/material remap configuration");
+            writer.WriteLine($"remap = {remapJson}");
+            writer.WriteLine();
+
+            if (textureDir != null)
+            {
+                string pyTexDir = textureDir.Replace("\\", "/");
+                writer.WriteLine("# Load PAA textures via armaio");
+                writer.WriteLine("try:");
+                writer.WriteLine("    import armaio");
+                writer.WriteLine("    load_paa = True");
+                writer.WriteLine("except ImportError:");
+                writer.WriteLine("    print('[BIS] armaio not available, PAA textures will be missing', flush=True)");
+                writer.WriteLine("    load_paa = False");
+                writer.WriteLine($"tex_dir = r\"{pyTexDir}\"");
+                writer.WriteLine();
+            }
+
+            writer.WriteLine("def _remap_path(path, table, prefix_map, suffix_map):");
+            writer.WriteLine("    \"\"\"Remap path using exact, prefix, then suffix matching.\"\"\"");
+            writer.WriteLine("    if not path:");
+            writer.WriteLine("        return None");
+            writer.WriteLine("    norm = path.replace('\\\\', '/')");
+            writer.WriteLine();
+            writer.WriteLine("    if table and norm in table:");
+            writer.WriteLine("        return table[norm]");
+            writer.WriteLine();
+            writer.WriteLine("    if prefix_map:");
+            writer.WriteLine("        sorted_pfx = sorted(prefix_map.keys(), key=len, reverse=True)");
+            writer.WriteLine("        for pfx in sorted_pfx:");
+            writer.WriteLine("            pfx_norm = pfx.replace('\\\\', '/')");
+            writer.WriteLine("            if norm.startswith(pfx_norm):");
+            writer.WriteLine("                suffix = norm[len(pfx_norm):]");
+            writer.WriteLine("                return prefix_map[pfx].replace('\\\\', '/') + suffix");
+            writer.WriteLine();
+            writer.WriteLine("    if suffix_map:");
+            writer.WriteLine("        sorted_sfx = sorted(suffix_map.keys(), key=len, reverse=True)");
+            writer.WriteLine("        for sfx in sorted_sfx:");
+            writer.WriteLine("            sfx_norm = sfx.replace('\\\\', '/')");
+            writer.WriteLine("            if norm.endswith(sfx_norm):");
+            writer.WriteLine("                head = norm[:-len(sfx_norm)]");
+            writer.WriteLine("                return head + suffix_map[sfx].replace('\\\\', '/')");
+            writer.WriteLine();
+            writer.WriteLine("    return None");
+            writer.WriteLine();
+
+            if (textureDir != null)
+            {
+                writer.WriteLine("def _load_paa_textures(tex_dir, materials):");
+                writer.WriteLine("    if not os.path.isdir(tex_dir):");
+                writer.WriteLine("        return 0");
+                writer.WriteLine("    if not load_paa:");
+                writer.WriteLine("        return 0");
+                writer.WriteLine("    from armaio.paa.pillow import open_paa_image");
+                writer.WriteLine("    from PIL import Image");
+                writer.WriteLine("    import numpy as np");
+                writer.WriteLine("    count = 0");
+                writer.WriteLine("    seen = set()");
+                writer.WriteLine("    for mat in materials:");
+                writer.WriteLine("        if not mat.name.startswith('P3D:'):");
+                writer.WriteLine("            continue");
+                writer.WriteLine("        tex = mat.a3ob_properties_material.texture_path");
+                writer.WriteLine("        if not tex or tex in seen:");
+                writer.WriteLine("            continue");
+                writer.WriteLine("        seen.add(tex)");
+                writer.WriteLine("        tex_name = os.path.basename(tex)");
+                writer.WriteLine("        tex_path = os.path.join(tex_dir, tex_name)");
+                writer.WriteLine("        if not os.path.isfile(tex_path) and not tex_name.endswith('.paa'):");
+                writer.WriteLine("            tex_path = tex_path + '.paa'");
+                writer.WriteLine("        if not os.path.isfile(tex_path):");
+                writer.WriteLine("            continue");
+                writer.WriteLine("        try:");
+                writer.WriteLine("            pil_img = open_paa_image(tex_path)");
+                writer.WriteLine("            img = bpy.data.images.new(tex_name, pil_img.width, pil_img.height, alpha=True)");
+                writer.WriteLine("            img.filepath = tex_path");
+                writer.WriteLine("            pixels = np.array(pil_img.convert('RGBA'), dtype=np.float32) / 255.0");
+                writer.WriteLine("            img.pixels = pixels.ravel()");
+                writer.WriteLine("            img.update()");
+                writer.WriteLine("            count += 1");
+                writer.WriteLine("        except Exception as e:");
+                writer.WriteLine("            print(f'[BIS]   Failed to load {tex_path}: {e}', flush=True)");
+                writer.WriteLine("    return count");
+                writer.WriteLine();
+            }
+
+            writer.WriteLine("def _retexture_model(model_path, output_path, remap, tex_dir, load_paa, lod_filter):");
+            writer.WriteLine("    try:");
+            writer.WriteLine("        # Clear previous model");
+            writer.WriteLine("        bpy.ops.object.select_all(action='SELECT')");
+            writer.WriteLine("        bpy.ops.object.delete()");
+            writer.WriteLine("        for img in list(bpy.data.images):");
+            writer.WriteLine("            bpy.data.images.remove(img)");
+            writer.WriteLine("        master = bpy.context.scene.collection");
+            writer.WriteLine("        for coll in list(bpy.data.collections):");
+            writer.WriteLine("            if coll != master and coll.name != 'Collection':");
+            writer.WriteLine("                bpy.data.collections.remove(coll, do_unlink=True)");
+            writer.WriteLine();
+            writer.WriteLine("        # Import model");
+            writer.WriteLine("        print(f\"[BIS] Importing {os.path.basename(model_path)}...\", flush=True)");
+            writer.WriteLine("        bpy.ops.a3ob.import_p3d(filepath=model_path,");
+            writer.WriteLine("            absolute_paths=True, enclose=True, groupby='TYPE',");
+            writer.WriteLine("            additional_data={'NORMALS','PROPS','MASS','SELECTIONS','UV','MATERIALS'},");
+            writer.WriteLine("            proxy_action='SEPARATE', translate_selections=True)");
+            writer.WriteLine("        print(\"[BIS] Import complete\", flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("        # Collect P3D materials");
+            writer.WriteLine("        p3d_mats = [m for m in bpy.data.materials if m.name.startswith('P3D:')]");
+            writer.WriteLine();
+            writer.WriteLine("        # Apply LOD filter if set");
+            writer.WriteLine("        if lod_filter:");
+            writer.WriteLine("            mat_lod = {}");
+            writer.WriteLine("            for obj in bpy.data.objects:");
+            writer.WriteLine("                if not getattr(obj, 'a3ob_properties_object', None):");
+            writer.WriteLine("                    continue");
+            writer.WriteLine("                if not obj.a3ob_properties_object.is_a3_lod:");
+            writer.WriteLine("                    continue");
+            writer.WriteLine("                lod_type = obj.a3ob_properties_object.lod");
+            writer.WriteLine("                for slot in getattr(obj, 'material_slots', []):");
+            writer.WriteLine("                    if slot.material and slot.material.name.startswith('P3D:'):");
+            writer.WriteLine("                        if slot.material.name not in mat_lod:");
+            writer.WriteLine("                            mat_lod[slot.material.name] = lod_type");
+            writer.WriteLine("            before = len(p3d_mats)");
+            writer.WriteLine("            p3d_mats = [m for m in p3d_mats if mat_lod.get(m.name, '') == lod_filter]");
+            writer.WriteLine("            after = len(p3d_mats)");
+            writer.WriteLine("            print(f\"[BIS] LOD filter [{lod_filter}]: {before} -> {after} materials\", flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("        # Load PAA textures if available");
+            writer.WriteLine("        if tex_dir and load_paa:");
+            writer.WriteLine("            loaded = _load_paa_textures(tex_dir, p3d_mats)");
+            writer.WriteLine("            print(f\"[BIS] Loaded {loaded} PAA textures\", flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("        # Apply remapping");
+            writer.WriteLine("        tex_exact = remap.get('textures', {})");
+            writer.WriteLine("        tex_prefix = remap.get('texture_prefixes', {})");
+            writer.WriteLine("        tex_suffix = remap.get('texture_suffixes', {})");
+            writer.WriteLine("        mat_exact = remap.get('materials', {})");
+            writer.WriteLine("        mat_prefix = remap.get('material_prefixes', {})");
+            writer.WriteLine("        mat_suffix = remap.get('material_suffixes', {})");
+            writer.WriteLine("        col_map = remap.get('color_types', {})");
+            writer.WriteLine();
+            writer.WriteLine("        tex_count = mat_count = col_count = 0");
+            writer.WriteLine("        for mat in p3d_mats:");
+            writer.WriteLine("            props = mat.a3ob_properties_material");
+            writer.WriteLine();
+            writer.WriteLine("            new_tex = _remap_path(props.texture_path, tex_exact, tex_prefix, tex_suffix)");
+            writer.WriteLine("            if new_tex is not None and new_tex != props.texture_path:");
+            writer.WriteLine("                print(f\"[BIS]   Tex: {props.texture_path} -> {new_tex}\", flush=True)");
+            writer.WriteLine("                props.texture_path = new_tex");
+            writer.WriteLine("                tex_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("            new_mat = _remap_path(props.material_path, mat_exact, mat_prefix, mat_suffix)");
+            writer.WriteLine("            if new_mat is not None and new_mat != props.material_path:");
+            writer.WriteLine("                print(f\"[BIS]   Mat: {props.material_path} -> {new_mat}\", flush=True)");
+            writer.WriteLine("                props.material_path = new_mat");
+            writer.WriteLine("                mat_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("            old_col = props.color_type");
+            writer.WriteLine("            if old_col and old_col in col_map:");
+            writer.WriteLine("                new_col = col_map[old_col]");
+            writer.WriteLine("                print(f\"[BIS]   Color: {old_col} -> {new_col}\", flush=True)");
+            writer.WriteLine("                props.color_type = new_col");
+            writer.WriteLine("                col_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("        parts = []");
+            writer.WriteLine("        if tex_count: parts.append(f'{tex_count} tex')");
+            writer.WriteLine("        if mat_count: parts.append(f'{mat_count} mat')");
+            writer.WriteLine("        if col_count: parts.append(f'{col_count} color')");
+            writer.WriteLine("        print(f\"[BIS] Remapped {', '.join(parts) or 'nothing'}\", flush=True)");
+            writer.WriteLine();
+            writer.WriteLine("        # Export modified model");
+            writer.WriteLine("        print(f\"[BIS] Exporting to {output_path}...\", flush=True)");
+            writer.WriteLine("        bpy.ops.a3ob.export_p3d(filepath=output_path,");
+            writer.WriteLine("            relative_paths=True, preserve_normals=True,");
+            writer.WriteLine("            validate_meshes=False, use_selection=False,");
+            writer.WriteLine("            visible_only=True, apply_transforms=True,");
+            writer.WriteLine("            apply_modifiers=True, sort_sections=True,");
+            writer.WriteLine("            lod_collisions='FAIL', force_lowercase=True,");
+            writer.WriteLine("            generate_components=True)");
+            writer.WriteLine("        print(f\"[BIS] Exported {os.path.basename(output_path)}\", flush=True)");
+            writer.WriteLine("        return True");
+            writer.WriteLine("    except Exception as e:");
+            writer.WriteLine("        print(f\"[BIS] Failed: {e}\", flush=True)");
+            writer.WriteLine("        traceback.print_exc()");
+            writer.WriteLine("        return False");
+            writer.WriteLine();
+            writer.WriteLine("# Process all models in one session");
+            writer.WriteLine("lod_filter = None");
+            if (!string.IsNullOrEmpty(lodFilter))
+                writer.WriteLine($"lod_filter = \"{lodFilter.ToUpperInvariant()}\"");
+            writer.WriteLine("success = fail = 0");
+            writer.WriteLine("for model_path, output_path in models:");
+            writer.WriteLine("    os.makedirs(os.path.dirname(output_path), exist_ok=True)");
+            writer.WriteLine("    if _retexture_model(model_path, output_path, remap, tex_dir, load_paa, lod_filter):");
+            writer.WriteLine("        print(f\"[BIS] OK {os.path.basename(model_path)}\", flush=True)");
+            writer.WriteLine("        success += 1");
+            writer.WriteLine("    else:");
+            writer.WriteLine("        print(f\"[BIS] FAIL {os.path.basename(model_path)}\", flush=True)");
+            writer.WriteLine("        fail += 1");
+            writer.WriteLine("print(f\"[BIS] Batch retx complete: {success} succeeded, {fail} failed\", flush=True)");
+            writer.WriteLine("if fail > 0:");
+            writer.WriteLine("    sys.exit(1)");
+            writer.WriteLine();
+
+            return scriptPath;
+        }
+
+        /// <summary>
+        /// Generates a Blender Python script for re-texturing a single P3D model.
+        /// </summary>
         public static string GenerateRetextureScript(
             string modelPath, string remapPath, string outputPath, string? textureDir = null, string? lodFilter = null)
         {

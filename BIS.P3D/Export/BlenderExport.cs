@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using BIS.Core.Config;
 using BIS.Core.Streams;
 using BIS.P3D.ODOL;
 
@@ -293,6 +294,95 @@ namespace BIS.P3D.Export
         }
 
         /// <summary>
+        /// Parses a config.cpp file and builds a Python dict literal mapping model filenames
+        /// to their displayName, hiddenSelections, and baseClassName.
+        /// Returns "None" if config.cpp can't be found or parsed (graceful fallback).
+        /// </summary>
+        private static string BuildConfigDataLiteral(string configCppPath)
+        {
+            try
+            {
+                if (!File.Exists(configCppPath))
+                {
+                    Console.WriteLine("[BIS cfg] config.cpp not found");
+                    return "None";
+                }
+
+                var parser = new ConfigParser();
+                var config = parser.ParseFile(configCppPath);
+                var cfgVehicles = config.Root.GetClass("CfgVehicles");
+
+                if (cfgVehicles == null)
+                {
+                    Console.WriteLine("[BIS cfg] CfgVehicles not found in config.cpp");
+                    return "None";
+                }
+
+                var modelMap = new Dictionary<string, (string displayName, string baseClass, string[] hiddenSelections)>(StringComparer.OrdinalIgnoreCase);
+                int classCount = 0, matchedCount = 0;
+
+                foreach (var entry in cfgVehicles.Entries)
+                {
+                    if (entry is ParamClass cls && !string.IsNullOrEmpty(cls.Name))
+                    {
+                        classCount++;
+                        string? model = cls.GetValue<string>("model", null);
+                        if (string.IsNullOrEmpty(model)) continue;
+
+                        // Model paths are typically "model/filename.p3d" or "filename.p3d"
+                        string modelName = Path.GetFileNameWithoutExtension(model.Replace('\\', '/'));
+                        if (string.IsNullOrEmpty(modelName)) continue;
+
+                        string displayName = cls.GetValue<string>("displayName", modelName);
+                        var hsArray = cls.GetArray<string>("hiddenSelections");
+                        string[] hiddenSelections = hsArray ?? Array.Empty<string>();
+                        string baseClass = cls.BaseClassName ?? "";
+
+                        // Keep the entry with the shortest model name match
+                        // (some classes have model="j_avs" vs model="model/jsoar_avs_mc_blk.p3d")
+                        if (!modelMap.ContainsKey(modelName) || model.Contains("model/"))
+                            modelMap[modelName] = (displayName, baseClass, hiddenSelections);
+                        matchedCount++;
+                    }
+                }
+
+                Console.WriteLine($"[BIS cfg] Scanned {classCount} CfgVehicles classes, matched {modelMap.Count} unique models");
+
+                if (modelMap.Count == 0) return "None";
+
+                var sb = new StringBuilder();
+                sb.Append('{');
+                bool first = true;
+                foreach (var kv in modelMap)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+
+                    string dn = kv.Value.displayName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                    string bc = kv.Value.baseClass.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                    var hs = kv.Value.hiddenSelections;
+
+                    sb.Append($"\"{kv.Key}\": {{\"dn\": \"{dn}\", \"bc\": \"{bc}\", \"hs\": [");
+                    for (int i = 0; i < hs.Length; i++)
+                    {
+                        if (i > 0) sb.Append(", ");
+                        sb.Append($"\"{hs[i].Replace("\\", "\\\\").Replace("\"", "\\\"")}\"");
+                    }
+                    sb.Append("]}");
+                }
+                sb.Append('}');
+
+                Console.WriteLine($"[BIS cfg] Config data built for {modelMap.Count} models");
+                return sb.ToString();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BIS cfg] Failed to parse config.cpp: {ex.Message}");
+                return "None";
+            }
+        }
+
+        /// <summary>
         /// Builds a texture dictionary in C# as a Python dict literal string.
         /// Scans the extracted dir for PAAs (primary, via armaio) and PNGs (fallback).
         /// PAA entries take priority over PNGs for same-named files.
@@ -423,7 +513,7 @@ namespace BIS.P3D.Export
             writer.WriteLine();
 
             // Per-model import + PBR + save block
-            writer.WriteLine("def import_and_save_model(p3d_path, model_name, output_dir, model_cfg_path, sel_map=None):");
+            writer.WriteLine("def import_and_save_model(p3d_path, model_name, output_dir, model_cfg_path, sel_map=None, cfg_data=None):");
             writer.WriteLine("    # Clear everything from previous model (objects, images, collections)");
             writer.WriteLine("    bpy.ops.object.select_all(action='SELECT')");
             writer.WriteLine("    bpy.ops.object.delete()");
@@ -522,6 +612,42 @@ namespace BIS.P3D.Export
             writer.WriteLine("        return _re.sub(r'_(?=\\d)', '', part)");
             writer.WriteLine("    raw_variant = _strip_brand(model_name)");
             writer.WriteLine("    variant = _contract_variant(raw_variant)");
+            writer.WriteLine();
+            writer.WriteLine("    # ─── Config class enrichment ───");
+            writer.WriteLine("    # Build a human-readable type prefix from the config.cpp base class.");
+            writer.WriteLine("    # E.g., H_HelmetB -> Helmet, V_CarrierRig -> Vest, B_AssaultPack -> Backpack");
+            writer.WriteLine("    _class_type_map = {");
+            writer.WriteLine("        'h_': 'Helmet', 'helmet': 'Helmet',");
+            writer.WriteLine("        'v_': 'Vest', 'vest': 'Vest',");
+            writer.WriteLine("        'u_': 'Uniform', 'uniform': 'Uniform',");
+            writer.WriteLine("        'b_': 'Backpack', 'backpack': 'Backpack', 'bag': 'Backpack',");
+            writer.WriteLine("        'itemcore': 'Item', 'item': 'Item',");
+            writer.WriteLine("        'weapon': 'Weapon', 'rifle': 'Rifle', 'launcher': 'Launcher',");
+            writer.WriteLine("        'optic': 'Optic', 'attachment': 'Attachment',");
+            writer.WriteLine("        'ammo': 'Ammo', 'magazine': 'Magazine',");
+            writer.WriteLine("        'food': 'Food', 'drink': 'Drink', 'medical': 'Medical',");
+            writer.WriteLine("    }");
+            writer.WriteLine("    def _class_prefix(bc):");
+            writer.WriteLine("        if not bc:");
+            writer.WriteLine("            return ''");
+            writer.WriteLine("        bc_low = bc.lower().replace('-', '_').replace(' ', '_')");
+            writer.WriteLine("        for prefix, label in _class_type_map.items():");
+            writer.WriteLine("            if bc_low.startswith(prefix) or prefix in bc_low:");
+            writer.WriteLine("                return label");
+            writer.WriteLine("        # Fallback: first capitalized segment");
+            writer.WriteLine("        parts = bc.split('_')");
+            writer.WriteLine("        if parts:");
+            writer.WriteLine("            return parts[0].capitalize()");
+            writer.WriteLine("        return ''");
+            writer.WriteLine("    cfg_label = ''");
+            writer.WriteLine("    if cfg_data:");
+            writer.WriteLine("        model_key = os.path.splitext(os.path.basename(p3d_path))[0].lower()");
+            writer.WriteLine("        cfg_entry = cfg_data.get(model_key)");
+            writer.WriteLine("        if cfg_entry:");
+            writer.WriteLine("            cfg_label = _class_prefix(cfg_entry.get('bc', ''))");
+            writer.WriteLine("            print(f\"[BIS]   Config: {cfg_entry.get('dn', model_key)} ({cfg_entry.get('bc', '?')})\", flush=True)");
+            writer.WriteLine("            if cfg_label and cfg_label.lower() not in variant.lower():");
+            writer.WriteLine("                variant = f'{cfg_label}_{variant}'");
             writer.WriteLine();
             writer.WriteLine("    # ─── LOD type helper ───");
             writer.WriteLine("    _lod_tags = {");
@@ -891,7 +1017,7 @@ namespace BIS.P3D.Export
         /// Generates a single batch Blender Python script that imports multiple models sequentially.
         /// </summary>
         private static string GenerateBatchScript(List<(string ModelName, string P3DPath)> models,
-            string outputDir, string imageDictLiteral, string? modelCfgPath)
+            string outputDir, string imageDictLiteral, string? modelCfgPath, string? configDataLiteral = null)
         {
             string batchName = $"batch_{models[0].ModelName}_{models[^1].ModelName}";
             string scriptPath = Path.Combine(outputDir, $"import_{batchName}.py");
@@ -921,7 +1047,8 @@ writer.WriteLine("import sys");
                 string pyP3DPath = p3dPath.Replace("\\", "/");
                 string pyOutDir = outputDir.Replace("\\", "/");
                 string selMap = BuildSelectionMapLiteral(p3dPath);
-                writer.WriteLine($"import_and_save_model(r\"{pyP3DPath}\", \"{modelName}\", r\"{pyOutDir}\", {(modelCfgPath != null ? "r\"" + modelCfgPath.Replace("\\", "/") + "\"" : "None")}, {selMap})");
+                string cfgData = configDataLiteral ?? "None";
+                writer.WriteLine($"import_and_save_model(r\"{pyP3DPath}\", \"{modelName}\", r\"{pyOutDir}\", {(modelCfgPath != null ? "r\"" + modelCfgPath.Replace("\\", "/") + "\"" : "None")}, {selMap}, {cfgData})");
             }
 
             return scriptPath;
@@ -976,13 +1103,21 @@ writer.WriteLine("import sys");
             if (modelCfgPath == null)
                 modelCfgPath = FindModelCfg(extractedDir);
 
+            // Build config data from config.cpp (displayName, baseClass, hiddenSelections)
+            string configDataLiteral = "None";
+            string configCppPath = Path.Combine(extractedDir, "config.cpp");
+            if (!File.Exists(configCppPath))
+                configCppPath = Path.Combine(extractedDir, "config.bin");
+            if (File.Exists(configCppPath))
+                configDataLiteral = BuildConfigDataLiteral(configCppPath);
+
             // Generate one batch script per batch
             var batchScripts = new List<string>();
             foreach (var batch in batches)
             {
                 // Convert to expected tuple format for GenerateBatchScript
                 var batchTuples = batch.Select(m => (m.Name, m.Path)).ToList();
-                string scriptPath = GenerateBatchScript(batchTuples, outputDir, imageDictLiteral, modelCfgPath);
+                string scriptPath = GenerateBatchScript(batchTuples, outputDir, imageDictLiteral, modelCfgPath, configDataLiteral);
                 batchScripts.Add(scriptPath);
                 Console.WriteLine($"  Generated batch script: {Path.GetFileName(scriptPath)} ({batch.Count} models)");
             }
@@ -1009,12 +1144,20 @@ writer.WriteLine("import sys");
             string imageDictLiteral = BuildImageDictLiteral(extractRoot, texturesDir);
             string? modelCfg = modelCfgPath ?? FindModelCfg(extractRoot);
 
+            // Build config data from config.cpp (displayName, baseClass, hiddenSelections)
+            string configDataLiteral = "None";
+            string configCppPath = Path.Combine(extractRoot, "config.cpp");
+            if (!File.Exists(configCppPath))
+                configCppPath = Path.Combine(extractRoot, "config.bin");
+            if (File.Exists(configCppPath))
+                configDataLiteral = BuildConfigDataLiteral(configCppPath);
+
             var models = new List<(string Name, string Path)>
             {
                 (modelName, Path.GetFullPath(p3dPath))
             };
 
-            return GenerateBatchScript(models, outputDir, imageDictLiteral, modelCfg);
+            return GenerateBatchScript(models, outputDir, imageDictLiteral, modelCfg, configDataLiteral);
         }
     }
 }

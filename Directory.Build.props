@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
-  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('.Test'))">
+  <ItemGroup Condition="$(MSBuildProjectName.EndsWith('Test'))">
     <PackageReference Include="GitHubActionsTestLogger" Version="2.4.1" PrivateAssets="all" />
   </ItemGroup>
 </Project>

@@ -136,7 +136,7 @@ public class CliTest : IDisposable
         var pboPath = Path.Combine(_tempDir, "test.pbo");
 
         var packOutput = RunCli($"pbo pack {_tempDir} -o {pboPath}");
-        Assert.Contains("Packed", packOutput);
+        Assert.Contains(pboPath, packOutput);
 
         // List it back
         var listOutput = RunCli($"pbo list {pboPath}");
@@ -234,7 +234,7 @@ public class CliTest : IDisposable
 
         var pboPath = Path.Combine(_tempDir, "test.pbo");
         var packOut = RunCli($"pbo pack {Path.Combine(_tempDir, "scripts")} -o {pboPath} -p test_mod");
-        Assert.Contains("Packed", packOut);
+        Assert.Contains(pboPath, packOut);
 
         var listOut = RunCli($"pbo list {pboPath}");
         Assert.Contains("test.sqf", listOut);

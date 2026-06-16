@@ -376,6 +376,7 @@ class A {
 
             Assert.Contains("class Empty", output);
             // Serializer puts { and }; on separate lines
+            output = output.Replace("\r\n", "\n");
             Assert.Contains("{\n", output);
             Assert.Contains("};", output);
         }

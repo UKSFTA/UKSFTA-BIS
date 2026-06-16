@@ -66,10 +66,28 @@ namespace BIS.P3D.Export
 
         /// <summary>
         /// Finds a model.cfg skeleton definition file in the extracted directory.
-        /// Returns the full path if found, or null if not found.
+        /// Checks convention paths first (_skeleton/model.cfg), then falls back
+        /// to scanning all subdirectories.
         /// </summary>
-        public static string FindModelCfg(string extractedDir)
+        public static string? FindModelCfg(string extractedDir)
         {
+            // Convention: _skeleton/model.cfg (user-placed, parallels _blender/_textures)
+            var skeletonDir = Path.Combine(extractedDir, "_skeleton");
+            if (Directory.Exists(skeletonDir))
+            {
+                var cfgInSkeleton = Path.Combine(skeletonDir, "model.cfg");
+                if (File.Exists(cfgInSkeleton))
+                    return cfgInSkeleton;
+
+                foreach (var f in Directory.GetFiles(skeletonDir, "*.cfg", SearchOption.TopDirectoryOnly))
+                {
+                    string name = Path.GetFileName(f);
+                    if (name.Equals("model.cfg", StringComparison.OrdinalIgnoreCase))
+                        return f;
+                }
+            }
+
+            // Fallback: scan all subdirectories
             var cfgFiles = Directory.GetFiles(extractedDir, "model.cfg", SearchOption.AllDirectories);
             if (cfgFiles.Length > 0)
                 return cfgFiles[0];
@@ -337,9 +355,10 @@ namespace BIS.P3D.Export
             writer.WriteLine("    for coll in list(bpy.data.collections):");
             writer.WriteLine("        if coll.name in lod_type_names:");
             writer.WriteLine("            coll.name = lod_type_names[coll.name]");
-            writer.WriteLine("            for parent in list(coll.users_collection):");
-            writer.WriteLine("                if parent.name != 'LODs':");
+            writer.WriteLine("            for parent in bpy.data.collections:");
+            writer.WriteLine("                if parent.name != 'LODs' and parent.children.get(coll.name) is not None:");
             writer.WriteLine("                    parent.children.unlink(coll)");
+            writer.WriteLine("                    break");
             writer.WriteLine("            lods_master.children.link(coll)");
             writer.WriteLine();
             writer.WriteLine("    # Assign diffuse texture to P3D materials");
@@ -427,9 +446,9 @@ namespace BIS.P3D.Export
             writer.WriteLine("            is_proxy = True");
             writer.WriteLine();
             writer.WriteLine("        if is_proxy:");
-            writer.WriteLine("            # Unlink from all current collections and link to Proxies");
-            writer.WriteLine("            for coll in list(obj.users_collection):");
-            writer.WriteLine("                coll.objects.unlink(obj)");
+            writer.WriteLine("            for coll in bpy.data.collections:");
+            writer.WriteLine("                if obj.name in coll.objects:");
+            writer.WriteLine("                    coll.objects.unlink(obj)");
             writer.WriteLine("            proxy_coll.objects.link(obj)");
             writer.WriteLine();
             writer.WriteLine("    obj_count = len([o for o in bpy.data.objects if o.type == 'MESH'])");
@@ -588,13 +607,13 @@ namespace BIS.P3D.Export
         /// <param name="outputDir">Directory for the generated .blend file</param>
         /// <param name="texturesDir">Optional PNG texture directory (pre-converted from PAA)</param>
         /// <returns>Path to the generated batch Python script</returns>
-        public static string GenerateSingleModelScript(string p3dPath, string extractRoot, string outputDir, string? texturesDir = null)
+        public static string GenerateSingleModelScript(string p3dPath, string extractRoot, string outputDir, string? texturesDir = null, string? modelCfgPath = null)
         {
             Directory.CreateDirectory(outputDir);
 
             string modelName = Path.GetFileNameWithoutExtension(p3dPath);
             string imageDictLiteral = BuildImageDictLiteral(extractRoot, texturesDir);
-            string? modelCfg = FindModelCfg(extractRoot);
+            string? modelCfg = modelCfgPath ?? FindModelCfg(extractRoot);
 
             var models = new List<(string Name, string Path)>
             {

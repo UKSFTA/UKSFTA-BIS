@@ -259,7 +259,7 @@ namespace BIS.PBO
             foreach (var entry in entries.OrderBy(e => e.StartOffset))
             {
                 if (entry.DataSize <= 0) continue;
-                string path = Path.Combine(dst, entry.FileName);
+                string path = Path.Combine(dst, entry.FileName.Replace('\\', Path.DirectorySeparatorChar));
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
                 File.WriteAllBytes(path, GetFileData(entry));
             }
@@ -275,7 +275,7 @@ namespace BIS.PBO
         {
             foreach (var entry in entries)
             {
-                var path = Path.Combine(target, entry.FileName);
+                var path = Path.Combine(target, entry.FileName.Replace('\\', Path.DirectorySeparatorChar));
 
                 Directory.CreateDirectory(Path.GetDirectoryName(path));
 

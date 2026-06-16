@@ -10,17 +10,25 @@ namespace BIS.P3D.MLOD
     {
         internal ComputedModelInfo(MLOD mLOD)
         {
-            var points = mLOD.Lods.SelectMany(l => l.Points);
+            var points = mLOD.Lods.SelectMany(l => l.Points).ToArray();
 
-            BboxMin = new Vector3P(
-                points.Min(p => p.X),
-                points.Min(p => p.Y),
-                points.Min(p => p.Z));
+            if (points.Length == 0)
+            {
+                BboxMin = new Vector3P(0, 0, 0);
+                BboxMax = new Vector3P(0, 0, 0);
+            }
+            else
+            {
+                BboxMin = new Vector3P(
+                    points.Min(p => p.X),
+                    points.Min(p => p.Y),
+                    points.Min(p => p.Z));
 
-            BboxMax = new Vector3P(
-                points.Max(p => p.X),
-                points.Max(p => p.Y),
-                points.Max(p => p.Z));
+                BboxMax = new Vector3P(
+                    points.Max(p => p.X),
+                    points.Max(p => p.Y),
+                    points.Max(p => p.Z));
+            }
 
             var pair = mLOD.Lods.SelectMany(l => l.NamedProperties.Where(n => string.Equals(n.Item1, "map", StringComparison.OrdinalIgnoreCase))).FirstOrDefault();
             if (pair != null)

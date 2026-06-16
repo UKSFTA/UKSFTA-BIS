@@ -9,6 +9,9 @@ namespace BIS.P3D.Conversion
 {
     public static class ODOL2MLOD
     {
+        /// <summary>ODOL version threshold for 32-bit (vs 16-bit) face indices.</summary>
+        private const int LongFaceIndicesVersion = 69;
+
         public static BIS.P3D.MLOD.MLOD Convert(BIS.P3D.ODOL.ODOL odol)
         {
             var lods = new List<BIS.P3D.MLOD.P3DM_LOD>();
@@ -17,7 +20,7 @@ namespace BIS.P3D.Conversion
             {
                 try
                 {
-                    lods.Add(ConvertLod(lod));
+                    lods.Add(ConvertLod(lod, odol.Version));
                 }
                 catch (Exception ex)
                 {
@@ -29,7 +32,7 @@ namespace BIS.P3D.Conversion
             return new BIS.P3D.MLOD.MLOD(lods.ToArray());
         }
 
-        private static BIS.P3D.MLOD.P3DM_LOD ConvertLod(BIS.P3D.ODOL.LOD odolLod)
+        private static BIS.P3D.MLOD.P3DM_LOD ConvertLod(BIS.P3D.ODOL.LOD odolLod, int odolVersion)
         {
             var vertices = odolLod.Vertices;
 
@@ -54,7 +57,7 @@ namespace BIS.P3D.Conversion
                 points[i] = new Point(vertices[i], PointFlags.NONE);
             }
 
-            var faces = ConvertFaces(odolLod);
+            var (faces, odolFaceIndexMap) = ConvertFaces(odolLod, odolVersion, normals);
 
             var taggs = new List<Tagg>();
 
@@ -82,7 +85,6 @@ namespace BIS.P3D.Conversion
                 }
             }
 
-            // Map Named Selections
             if (odolLod.NamedSelections != null)
             {
                 foreach (var selection in odolLod.NamedSelections)
@@ -100,8 +102,8 @@ namespace BIS.P3D.Conversion
                     if (selection.SelectedFaces != null)
                     {
                         var faceSet = new HashSet<int>(selection.SelectedFaces);
-                        for (int i = 0; i < faces.Length; i++)
-                            if (faceSet.Contains(i)) facesSelection[i] = 1;
+                        for (int i = 0; i < odolFaceIndexMap.Length; i++)
+                            if (faceSet.Contains(odolFaceIndexMap[i])) facesSelection[i] = 1;
                     }
 
                     taggs.Add(new NamedSelectionTagg(selection.Name, pointsSelection, facesSelection));
@@ -123,61 +125,114 @@ namespace BIS.P3D.Conversion
             return new BIS.P3D.MLOD.P3DM_LOD(odolLod.Resolution, points, normals, faces, taggs);
         }
 
-        private static BIS.P3D.MLOD.Face[] ConvertFaces(BIS.P3D.ODOL.LOD odolLod)
+        /// <summary>
+        /// Converts ODOL faces to MLOD faces, triangulating n-gons (5+ vertices).
+        /// Returns both the MLOD faces and a mapping from each MLOD face to its
+        /// original ODOL face index (for named selection mapping).
+        /// </summary>
+        private static (Face[] Faces, int[] OdolFaceIndex) ConvertFaces(BIS.P3D.ODOL.LOD odolLod, int odolVersion, Vector3P[] normals)
         {
-            var mlodFaces = new List<BIS.P3D.MLOD.Face>();
+            var mlodFaces = new List<Face>();
+            var odolIndexMap = new List<int>();
 
-            if (odolLod.Sections == null) return mlodFaces.ToArray();
-            if (odolLod.Polygons == null)
-            {
-                return mlodFaces.ToArray();
-            }
+            if (odolLod.Sections == null) return (mlodFaces.ToArray(), odolIndexMap.ToArray());
+            if (odolLod.Polygons == null) return (mlodFaces.ToArray(), odolIndexMap.ToArray());
+
+            var allFaces = odolLod.Polygons.Faces;
+            var uvs = (odolLod.UvSets != null && odolLod.UvSets.Length > 0) ? odolLod.UvSets[0].GetUV() : null;
+
+            bool isShortFaceIndices = odolVersion < LongFaceIndicesVersion;
+            uint sizeOfFace3 = isShortFaceIndices ? 8u : 16u;
+            uint padOfFace4 = isShortFaceIndices ? 2u : 4u;
 
             foreach (var section in odolLod.Sections)
             {
-                var uvs = (odolLod.UvSets != null && odolLod.UvSets.Length > 0) ? odolLod.UvSets[0].GetUV() : null;
-                var facesInSection = section.GetFaces(odolLod.Polygons.Faces);
-
-                if (facesInSection == null)
+                uint position = 0u;
+                for (int faceIdx = 0; faceIdx < allFaces.Length && position < section.FaceUpperIndex; faceIdx++)
                 {
-                    continue;
-                }
-
-                foreach (var odolFace in facesInSection)
-                {
-                    var vertexCount = odolFace.VertexIndices.Length;
-
-                    var mlodVertices = new BIS.P3D.MLOD.Vertex[4]; // MLOD faces seem to expect 4 vertices in the structure
-                    for (int i = 0; i < 4; i++)
+                    if (position >= section.FaceLowerIndex && position < section.FaceUpperIndex)
                     {
-                        if (i < vertexCount)
+                        var odolFace = allFaces[faceIdx];
+                        var convFaces = ConvertOneFace(odolFace, section, odolLod, uvs, normals);
+                        foreach (var mf in convFaces)
                         {
-                            var vIdx = odolFace.VertexIndices[vertexCount - 1 - i];
-                            int normalIdx = vIdx;
-                            if (odolLod.Normals != null && normalIdx >= odolLod.Normals.Count)
-                            {
-                                normalIdx = 0;
-                            }
-                            mlodVertices[i] = new BIS.P3D.MLOD.Vertex(
-                                vIdx,
-                                normalIdx,
-                                (uvs != null && vIdx < uvs.Length) ? uvs[vIdx].X : 0,
-                                (uvs != null && vIdx < uvs.Length) ? uvs[vIdx].Y : 0
-                            );
-                        }
-                        else
-                        {
-                            mlodVertices[i] = new BIS.P3D.MLOD.Vertex(0, 0, 0, 0);
+                            mlodFaces.Add(mf);
+                            odolIndexMap.Add(faceIdx);
                         }
                     }
-
-                    string texture = (odolLod.Textures != null && section.TextureIndex >= 0 && section.TextureIndex < odolLod.Textures.Length) ? odolLod.Textures[section.TextureIndex] : "";
-                    string material = (odolLod.Materials != null && section.MaterialIndex >= 0 && section.MaterialIndex < odolLod.Materials.Length) ? odolLod.Materials[section.MaterialIndex].MaterialName : (section.Material ?? "");
-
-                    mlodFaces.Add(new BIS.P3D.MLOD.Face(vertexCount, mlodVertices, BIS.P3D.MLOD.FaceFlags.DEFAULT, texture, material));
+                    position += sizeOfFace3;
+                    if (allFaces[faceIdx].VertexIndices.Length == 4)
+                        position += padOfFace4;
                 }
             }
-            return mlodFaces.ToArray();
+
+            return (mlodFaces.ToArray(), odolIndexMap.ToArray());
+        }
+
+        private static Vertex MakeMlodVertex(int vertexIndex, Vector3P[] normals, System.Numerics.Vector2[] uvs)
+        {
+            int normalIdx = vertexIndex;
+            if (normals != null && normalIdx >= normals.Length)
+                normalIdx = 0;
+            return new Vertex(
+                vertexIndex,
+                normalIdx,
+                (uvs != null && vertexIndex < uvs.Length) ? uvs[vertexIndex].X : 0,
+                (uvs != null && vertexIndex < uvs.Length) ? uvs[vertexIndex].Y : 0
+            );
+        }
+
+        private static List<Face> ConvertOneFace(
+            Polygon odolFace, Section section, BIS.P3D.ODOL.LOD odolLod,
+            System.Numerics.Vector2[] uvs, Vector3P[] normals)
+        {
+            var result = new List<Face>();
+            var vertexCount = odolFace.VertexIndices.Length;
+
+            string texture = (odolLod.Textures != null && section.TextureIndex >= 0 && section.TextureIndex < odolLod.Textures.Length)
+                ? odolLod.Textures[section.TextureIndex] : "";
+            string material = (odolLod.Materials != null && section.MaterialIndex >= 0 && section.MaterialIndex < odolLod.Materials.Length)
+                ? odolLod.Materials[section.MaterialIndex].MaterialName : (section.Material ?? "");
+
+            if (vertexCount <= 4)
+            {
+                // ODOL order reversed for MLOD winding convention
+                var mlodVertices = new Vertex[4];
+                for (int i = 0; i < 4; i++)
+                {
+                    if (i < vertexCount)
+                    {
+                        mlodVertices[i] = MakeMlodVertex(
+                            odolFace.VertexIndices[vertexCount - 1 - i], normals, uvs);
+                    }
+                    else
+                    {
+                        mlodVertices[i] = new Vertex(0, 0, 0, 0);
+                    }
+                }
+                result.Add(new Face(vertexCount, mlodVertices, FaceFlags.DEFAULT, texture, material));
+            }
+            else
+            {
+                // Fan-triangulate n-gon. ODOL order: [v0, v1, ..., v_{N-1}].
+                // MLOD reverses winding: v_{N-1} becomes the fan center.
+                // Triangle k: (v_{N-1}, v_{N-2-k}, v_{N-3-k}) for k = 0..N-3
+                for (int tri = 0; tri < vertexCount - 2; tri++)
+                {
+                    var mlodVertices = new Vertex[4];
+                    mlodVertices[0] = MakeMlodVertex(
+                        odolFace.VertexIndices[vertexCount - 1], normals, uvs);
+                    mlodVertices[1] = MakeMlodVertex(
+                        odolFace.VertexIndices[vertexCount - 2 - tri], normals, uvs);
+                    mlodVertices[2] = MakeMlodVertex(
+                        odolFace.VertexIndices[vertexCount - 3 - tri], normals, uvs);
+                    mlodVertices[3] = new Vertex(0, 0, 0, 0);
+
+                    result.Add(new Face(3, mlodVertices, FaceFlags.DEFAULT, texture, material));
+                }
+            }
+
+            return result;
         }
     }
 }

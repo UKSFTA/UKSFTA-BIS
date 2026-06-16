@@ -50,7 +50,7 @@ public class StringtableTests
     {
         var table = StringtableXml.Load(new MemoryStream(Encoding.UTF8.GetBytes(SampleXml)));
         Assert.Equal(2, table.Project.Packages[0].Keys.Count);
-        Assert.Equal(1, table.Project.Packages[1].Keys.Count);
+        Assert.Single(table.Project.Packages[1].Keys);
     }
 
     [Fact]

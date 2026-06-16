@@ -72,31 +72,31 @@ namespace BIS.ALB.Test.Core
         public void Constructor_WithTag_CreatesEntry()
         {
             // Build ALB1 with 1 tag and 1 entry (string value)
-    using var ms = new MemoryStream();
-    var writer = new BinaryWriterEx(ms);
-    writer.WriteAscii("ALB1", 4);  // signature
-    writer.Write(new byte[15]);     // unknown header
+            using var ms = new MemoryStream();
+            var writer = new BinaryWriterEx(ms);
+            writer.WriteAscii("ALB1", 4);  // signature
+            writer.Write(new byte[15]);     // unknown header
 
-    // 1 tag: length-prefixed ascii (ushort length + data)
-    writer.Write(1);                // nTags
-    writer.Write((ushort)1);        // tagID = 1
-    var tagName = "test_tag";
-    writer.Write((ushort)tagName.Length);
-    writer.Write(tagName.ToCharArray());
+            // 1 tag: length-prefixed ascii (ushort length + data)
+            writer.Write(1);                // nTags
+            writer.Write((ushort)1);        // tagID = 1
+            var tagName = "test_tag";
+            writer.Write((ushort)tagName.Length);
+            writer.Write(tagName.ToCharArray());
 
-    writer.Write(new byte[3]);      // unknown after tags
+            writer.Write(new byte[3]);      // unknown after tags
 
-    // 0 classes
-    writer.Write(0);
+            // 0 classes
+            writer.Write(0);
 
-    writer.Write(new byte[6]);      // unknown after classes
+            writer.Write(new byte[6]);      // unknown after classes
 
-    // 1 entry: tagID=1, type=String(11), value="hello"
-    writer.Write((short)1);         // TagID
-    writer.Write((byte)11);         // datatype: String
-    var value = "hello";
-    writer.Write((ushort)value.Length);
-    writer.Write(value.ToCharArray());
+            // 1 entry: tagID=1, type=String(11), value="hello"
+            writer.Write((short)1);         // TagID
+            writer.Write((byte)11);         // datatype: String
+            var value = "hello";
+            writer.Write((ushort)value.Length);
+            writer.Write(value.ToCharArray());
 
             writer.Flush();
             ms.Position = 0;

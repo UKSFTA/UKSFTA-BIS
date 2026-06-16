@@ -9,8 +9,13 @@
   <ItemGroup>
     <PackageReference Include="Spectre.Console" Version="*" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
-    <PackageReference Include="ILRepack.MSBuild.Task" Version="*" />
+    <PackageReference Include="ILRepack.Lib.MSBuild.Task" Version="*" />
   </ItemGroup>
+
+  <!-- Remove duplicate-typed DLL before ILRepack merge -->
+  <Target Name="RemoveDuplicateAnsiDll" BeforeTargets="ILRepack" Condition="$(Configuration.Contains('Release'))">
+    <Delete Files="$(OutputPath)Spectre.Console.Ansi.dll" />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
@@ -20,6 +25,11 @@
     <ProjectReference Include="..\BIS.Stringtable\BIS.Stringtable.csproj" />
     <ProjectReference Include="..\BIS.SQF\BIS.SQF.csproj" />
     <ProjectReference Include="..\BIS.PBO.Deobfuscator\BIS.PBO.Deobfuscator.csproj" />
+    <ProjectReference Include="..\BIS.WRP\BIS.WRP.csproj" />
+    <ProjectReference Include="..\BIS.RTM\BIS.RTM.csproj" />
+    <ProjectReference Include="..\BIS.PAK\BIS.PAK.csproj" />
+    <ProjectReference Include="..\BIS.EBO\BIS.EBO.csproj" />
+    <ProjectReference Include="..\BIS.ALB\BIS.ALB.csproj" />
   </ItemGroup>
 
 </Project>

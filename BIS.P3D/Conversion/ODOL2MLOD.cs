@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BIS.Core;
 using BIS.Core.Math;
 using BIS.P3D.ODOL;
 using BIS.P3D.MLOD;
@@ -24,7 +25,7 @@ namespace BIS.P3D.Conversion
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($" [Debug] Failed converting LOD: {ex.Message}");
+                    Terminal.Muted($"Failed converting LOD: {ex.Message}");
                     throw;
                 }
             }

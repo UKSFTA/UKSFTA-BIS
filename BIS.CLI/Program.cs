@@ -37,11 +37,10 @@ var root = new RootCommand("BIS file format CLI tool")
         {
             new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
         },
-        new Command("export", "Export a P3D model to Blender .blend format")
+        new Command("export", "Export a P3D model(s) to Blender .blend format")
         {
-            new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
-            new Option<DirectoryInfo?>(["--output", "-o"], "Output directory for .blend file"),
-            new Option<bool>(["--convert-paa"], "Pre-convert PAA textures to PNG (armaio handles in-Blender by default)"),
+            new Argument<string>("path", "Path to .p3d file, or directory of already-extracted P3D files for batch export"),
+            new Option<DirectoryInfo?>(["--output", "-o"], "Output directory for .blend file(s)"),
             new Option<FileInfo?>(["--model-cfg"], "Path to model.cfg for skeleton/armature import"),
         },
         new Command("retx", "Re-texture a P3D model via Blender")
@@ -159,7 +158,7 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "p3d info":         HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<bool>(sub, parse, "--convert-paa"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
+                    case "p3d export":       HandleP3DExport(GetPathArg(sub.Arguments.First(), parse), GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
                     case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output"), GetOptVal<DirectoryInfo?>(sub, parse, "--texture-dir"), GetOptVal<string?>(sub, parse, "--lod")); break;
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
@@ -883,19 +882,40 @@ static void HandleP3DRoundtrip(string path)
     }
 }
 
-static void HandleP3DExport(string path, DirectoryInfo? outputDir, bool convertPaa, FileInfo? modelCfg = null)
+static void HandleP3DExport(string path, DirectoryInfo? outputDir, FileInfo? modelCfg = null)
 {
-    string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
-    string? modelCfgPath = modelCfg?.FullName;
-    if (modelCfgPath != null)
-        AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
-    AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
-    var task = BlenderHelper.ExportSingleAsync(path, outDir, convertPaa, modelCfgPath);
-    bool ok = task.GetAwaiter().GetResult();
-    if (ok)
-        AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");
+    if (Directory.Exists(path))
+    {
+        string outDir = outputDir?.FullName ?? Path.Combine(path, "_blender");
+        string? modelCfgPath = modelCfg?.FullName;
+        if (modelCfgPath != null)
+            AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
+        AnsiConsole.MarkupLine($"[blue]Batch-exporting all .p3d files in {path}...[/]");
+        var task = BlenderHelper.ExportAsync(path, outDir);
+        int count = task.GetAwaiter().GetResult();
+        if (count > 0)
+            AnsiConsole.MarkupLine($"[green]Blender batch export complete in {outDir}[/]");
+        else
+            AnsiConsole.MarkupLine($"[red]Blender batch export failed[/]");
+    }
+    else if (File.Exists(path))
+    {
+        string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
+        string? modelCfgPath = modelCfg?.FullName;
+        if (modelCfgPath != null)
+            AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
+        AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
+        var task = BlenderHelper.ExportSingleAsync(path, outDir, modelCfgPath);
+        bool ok = task.GetAwaiter().GetResult();
+        if (ok)
+            AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");
+        else
+            AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
+    }
     else
-        AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
+    {
+        AnsiConsole.MarkupLine($"[red]Error: '{path}' is not a file or directory[/]");
+    }
 }
 
 static void HandleP3DRetexture(string path, FileInfo remapFile, FileInfo? output, DirectoryInfo? textureDir = null, string? lodFilter = null)
@@ -1059,14 +1079,11 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
     int extracted = DeobfuscatedExtract(pbo, result, outDir, out var pathMap);
     AnsiConsole.MarkupLine($"[green]Extracted {extracted} files to {outDir} (deobfuscated)[/]");
 
-    // ─── Blender export (batch import via armaio → .blend) ───
+    // ─── Blender export (PAA→PNG pre-conversion, then batch import via Blender) ───
     if (exportBlender)
     {
-        // PAA textures are decoded in-Blender via armaio (fast, no pre-conversion needed).
-        string? textureDir = null;
-
         string blenderDir = Path.Combine(outDir, "_blender");
-        var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir, textureDir);
+        var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir);
         int blenderResult = blenderTask.GetAwaiter().GetResult();
         AnsiConsole.MarkupLine($"[green]Blender export complete in {blenderDir}[/]");
     }
@@ -1127,15 +1144,6 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
 /// </summary>
 static int DeobfuscatedExtract(BIS.PBO.PBO pbo, DeobfuscationResult result, string outDir, out Dictionary<string, string> pathMap)
 {
-    if (!result.IsObfuscated && result.RecoveredNames.Count == 0)
-    {
-        // Clean PBO — extract as-is
-        Directory.CreateDirectory(outDir);
-        pbo.ExtractFiles(pbo.Files, outDir);
-        pathMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        return pbo.Files.Count;
-    }
-
     if (result.IsObfuscated)
         AnsiConsole.MarkupLine($"  [yellow]Detected: {result.MatchedProfile}[/]");
 

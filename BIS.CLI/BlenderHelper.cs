@@ -12,10 +12,17 @@ internal static class BlenderHelper
 {
     /// <summary>
     /// Generates batch Blender scripts and runs them concurrently.
-    /// Each batch script imports multiple models sequentially in one Blender process.
+    /// PAA textures are pre-converted to PNG in C# so Blender loads them natively.
     /// </summary>
-    public static async Task<int> ExportAsync(string extractedDir, string outputDir, string texturesDir = null)
+    public static async Task<int> ExportAsync(string extractedDir, string outputDir)
     {
+        // Resolve to absolute paths so GetRelativePath works correctly (Uri requires absolute paths)
+        extractedDir = Path.GetFullPath(extractedDir);
+        outputDir = Path.GetFullPath(outputDir);
+        string texturesDir = Path.Combine(outputDir, "_textures");
+        int texCount = BlenderExport.ExportAll(extractedDir, texturesDir);
+        Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
+
         // Generate batch scripts (each handles multiple models in a single Blender session)
         int cpuCount = Environment.ProcessorCount;
         int concurrency = Math.Clamp(cpuCount / 2, 2, 4); // 2-4 concurrent Blender processes
@@ -66,7 +73,11 @@ internal static class BlenderHelper
     internal static string DeriveExtractRoot(string p3dPath)
     {
         string? dir = Path.GetDirectoryName(Path.GetFullPath(p3dPath));
-        if (dir != null && string.Equals(Path.GetFileName(dir), "model", StringComparison.OrdinalIgnoreCase))
+        string? dirName = dir != null ? Path.GetFileName(dir) : null;
+        // PBO extraction places .p3d files in "model" or "models" subdirectory,
+        // with textures/materials in sibling directories at the parent level.
+        if (dirName != null && (string.Equals(dirName, "model", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(dirName, "models", StringComparison.OrdinalIgnoreCase)))
         {
             string? parent = Path.GetDirectoryName(dir);
             if (parent != null) return parent;
@@ -76,20 +87,18 @@ internal static class BlenderHelper
 
     /// <summary>
     /// Exports a single .p3d file to .blend format.
-    /// PAA textures are decoded in-Blender via armaio (no pre-conversion needed).
+    /// PAA textures are pre-converted to PNG in C# so Blender loads them natively.
     /// </summary>
-    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir, bool convertPaa = false, string? modelCfgPath = null)
+    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir, string? modelCfgPath = null)
     {
+        // Resolve to absolute paths so GetRelativePath works correctly (Uri requires absolute paths)
+        outputDir = Path.GetFullPath(outputDir);
         string extractRoot = DeriveExtractRoot(p3dPath);
-        string? texturesDir = null;
 
-        if (convertPaa)
-        {
-            texturesDir = Path.Combine(outputDir, "_textures");
-            Directory.CreateDirectory(texturesDir);
-            int texCount = BlenderExport.ExportAll(extractRoot, texturesDir);
-            Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
-        }
+        string texturesDir = Path.Combine(outputDir, "_textures");
+        Directory.CreateDirectory(texturesDir);
+        int texCount = BlenderExport.ExportAll(extractRoot, texturesDir);
+        Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
 
         // Generate single-model batch script
         string scriptPath = BlenderExport.GenerateSingleModelScript(p3dPath, extractRoot, outputDir, texturesDir, modelCfgPath);

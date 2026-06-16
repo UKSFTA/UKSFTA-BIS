@@ -259,7 +259,8 @@ namespace BIS.Core.Config
                 _diagnostics.Add(new LintDiagnostic(
                     "L-C04", LintSeverity.Error,
                     $"Base class '{baseName}' is not defined or declared as external",
-                    "", 0, baseName) { Fix = fix });
+                    "", 0, baseName)
+                { Fix = fix });
             }
         }
 
@@ -299,7 +300,8 @@ namespace BIS.Core.Config
                     _diagnostics.Add(new LintDiagnostic(
                         "L-C05", LintSeverity.Warning,
                         $"Base class '{cls.BaseClassName}' has incorrect casing (differs from external declaration)",
-                        cls.File, cls.Line, childPath) { Fix = fix });
+                        cls.File, cls.Line, childPath)
+                    { Fix = fix });
                 }
             }
         }
@@ -401,7 +403,8 @@ namespace BIS.Core.Config
                 _diagnostics.Add(new LintDiagnostic(
                     "L-C12", LintSeverity.Help,
                     $"Quoted math expression '{val}' could be unquoted for build-time evaluation",
-                    pv.File, pv.Line, path) { Fix = fix });
+                    pv.File, pv.Line, path)
+                { Fix = fix });
             }
         }
 
@@ -450,7 +453,8 @@ namespace BIS.Core.Config
                 _diagnostics.Add(new LintDiagnostic(
                     "L-C13", LintSeverity.Help,
                     $"Unnecessary '_this call' in '{pv.Name}': 'call' inherits _this automatically",
-                    pv.File, pv.Line, path) { Fix = fix });
+                    pv.File, pv.Line, path)
+                { Fix = fix });
             }
         }
 
@@ -483,7 +487,8 @@ namespace BIS.Core.Config
                     _diagnostics.Add(new LintDiagnostic(
                         "L-C14", LintSeverity.Warning,
                         $"External class '{ext}' is declared but never used as a base class",
-                        "", 0, ext) { Fix = fix });
+                        "", 0, ext)
+                    { Fix = fix });
                 }
             }
         }

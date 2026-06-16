@@ -42,7 +42,7 @@ namespace BIS.Core.Compression
                     dst[iDst++] = (byte)c;
                     bytesLeft--;
                     // continue decompression
-                        text_buf[r] = (byte)c;
+                    text_buf[r] = (byte)c;
                     r++; r &= (N - 1);
                 }
                 else

@@ -9,12 +9,12 @@ namespace BIS.Core;
 public static class Terminal
 {
     // ── Colour scheme ──────────────────────────────────────────────
-    private const string Heading    = "steelblue1";
-    private const string Primary    = "deepskyblue2";
+    private const string Heading = "steelblue1";
+    private const string Primary = "deepskyblue2";
     private const string ColSuccess = "green";
     private const string ColWarning = "orange1";
-    private const string ColError   = "red";
-    private const string ColMuted   = "grey";
+    private const string ColError = "red";
+    private const string ColMuted = "grey";
 
     // ── Top-level helpers ──────────────────────────────────────────
 
@@ -84,14 +84,14 @@ public static class Terminal
 
     // ── Coloured text helpers ──────────────────────────────────────
 
-    public static void Info(string message)     => WriteLine(Primary, message);
-    public static void Success(string message)  => WriteLine(ColSuccess, message);
-    public static void Warning(string message)  => WriteLine(ColWarning, message);
-    public static void Error(string message)    => WriteLine(ColError, message);
-    public static void Muted(string message)    => WriteLine(ColMuted, message);
+    public static void Info(string message) => WriteLine(Primary, message);
+    public static void Success(string message) => WriteLine(ColSuccess, message);
+    public static void Warning(string message) => WriteLine(ColWarning, message);
+    public static void Error(string message) => WriteLine(ColError, message);
+    public static void Muted(string message) => WriteLine(ColMuted, message);
 
-    public static void WriteInfo(string message)     => Write(Primary, message);
-    public static void WriteSuccess(string message)  => Write(ColSuccess, message);
+    public static void WriteInfo(string message) => Write(Primary, message);
+    public static void WriteSuccess(string message) => Write(ColSuccess, message);
 
     public static void Entry(string label, object value, string valueColor = null)
     {

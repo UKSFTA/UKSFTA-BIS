@@ -50,11 +50,11 @@ internal static class BlenderHelper
                 {
                     completed++;
                     if (ok) successCount++;
-                var status = ok ? "OK" : "FAILED";
-                if (ok)
-                    Terminal.Success($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
-                else
-                    Terminal.Error($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
+                    var status = ok ? "OK" : "FAILED";
+                    if (ok)
+                        Terminal.Success($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
+                    else
+                        Terminal.Error($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
                 }
                 return ok;
             }

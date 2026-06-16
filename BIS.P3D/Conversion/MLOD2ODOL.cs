@@ -429,8 +429,11 @@ namespace BIS.P3D.Conversion
             for (int i = 0; i < n; i++) if (hasUV[i])
             {
                 if (!any) { minU = maxU = uvs[i][0]; minV = maxV = uvs[i][1]; any = true; }
-                else { if (uvs[i][0] < minU) minU = uvs[i][0]; if (uvs[i][1] < minV) minV = uvs[i][1];
-                       if (uvs[i][0] > maxU) maxU = uvs[i][0]; if (uvs[i][1] > maxV) maxV = uvs[i][1]; }
+                else
+                {
+                    if (uvs[i][0] < minU) minU = uvs[i][0]; if (uvs[i][1] < minV) minV = uvs[i][1];
+                    if (uvs[i][0] > maxU) maxU = uvs[i][0]; if (uvs[i][1] > maxV) maxV = uvs[i][1];
+                }
             }
             w.Write(minU); w.Write(minV); w.Write(maxU); w.Write(maxV);
             w.Write((uint)n); w.Write(false);

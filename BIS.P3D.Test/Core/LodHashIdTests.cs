@@ -92,9 +92,9 @@ namespace BIS.P3D.Test.Core
         {
             var vectors = new List<Vector3>();
             for (int x = 0; x < 10; x++)
-            for (int y = 0; y < 10; y++)
-            for (int z = 0; z < 10; z++)
-                vectors.Add(new Vector3(x * 0.5f, y * 0.5f, z * 0.5f));
+                for (int y = 0; y < 10; y++)
+                    for (int z = 0; z < 10; z++)
+                        vectors.Add(new Vector3(x * 0.5f, y * 0.5f, z * 0.5f));
 
             var hash1 = LodHashId.Compute(vectors);
             var hash2 = LodHashId.Compute(vectors);

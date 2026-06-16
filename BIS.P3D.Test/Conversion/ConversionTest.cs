@@ -55,7 +55,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_SingleTri_PreservesVertexCount()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = new[] { Normal, Normal, Normal };
             var faces = new[] { MakeTri(TV0, TV1, TV2, "tex.paa", "mat.rvmat") };
             var lods = new[] { MakeLod(1e8f, points, normals, faces, null) };
@@ -74,7 +74,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_SingleQuad_PreservesVertexCount()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0), P(1,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0), P(1, 1, 0) };
             var normals = new[] { Normal, Normal, Normal, Normal };
             var faces = new[] { MakeQuad(TV0, TV1, TV2, TV3, "tex.paa", "mat.rvmat") };
             var lods = new[] { MakeLod(1e8f, points, normals, faces, null) };
@@ -92,7 +92,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_MixedTriQuad_PreservesFaceCount()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0), P(1,1,0), P(0,2,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0), P(1, 1, 0), P(0, 2, 0) };
             var normals = Enumerable.Repeat(Normal, 5).ToArray();
             var faces = new[]
             {
@@ -116,7 +116,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_MultipleLODs_PreservesCount()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 3).ToArray();
             var tri = MakeTri(TV0, TV1, TV2, "t.paa", "t.rvmat");
             var lods = new[]
@@ -137,7 +137,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_Properties_Preserved()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 3).ToArray();
             var tri = MakeTri(TV0, TV1, TV2, "t.paa", "t.rvmat");
             var taggs = new Tagg[]
@@ -160,7 +160,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_TextureAndMaterial_Preserved()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 3).ToArray();
             var faces = new[]
             {
@@ -183,14 +183,14 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_VertexWinding_Preserved()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 3).ToArray();
             // ODOL uses CW winding; MLOD uses CCW. Roundtrip should produce
             // same winding after two reversals.
             var a = new Vertex(0, 0, 0, 0);
             var b = new Vertex(1, 0, 0.5f, 0);
             var c = new Vertex(2, 0, 1, 0);
-            var faces = new[] { new Face(3, new[] { a, b, c, new Vertex(0,0,0,0) }, FaceFlags.DEFAULT, "t.paa", "t.rvmat") };
+            var faces = new[] { new Face(3, new[] { a, b, c, new Vertex(0, 0, 0, 0) }, FaceFlags.DEFAULT, "t.paa", "t.rvmat") };
             var lods = new[] { MakeLod(1e8f, points, normals, faces, null) };
             var mlod = new Mlod(lods);
 
@@ -209,7 +209,7 @@ namespace BIS.P3D.Test.Conversion
         [Fact]
         public void Roundtrip_NamedSelection_Preserved()
         {
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0), P(1,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0), P(1, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 4).ToArray();
             var faces = new[]
             {
@@ -244,7 +244,7 @@ namespace BIS.P3D.Test.Conversion
         public void Roundtrip_DifferentResolutions_Preserved()
         {
             float[] resolutions = { 1e8f, 1000f, 100f, 10f };
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0) };
             var normals = Enumerable.Repeat(Normal, 3).ToArray();
             var tri = MakeTri(TV0, TV1, TV2, "t.paa", "t.rvmat");
             var lods = resolutions.Select(r => MakeLod(r, points, normals, new[] { tri }, null)).ToArray();
@@ -262,7 +262,7 @@ namespace BIS.P3D.Test.Conversion
         public void Roundtrip_FaceIndicesMatch_AfterTriangulation()
         {
             // Multiple tris/quads sharing vertices — verify index consistency
-            var points = new[] { P(0,0,0), P(1,0,0), P(0,1,0), P(1,1,0), P(0,2,0) };
+            var points = new[] { P(0, 0, 0), P(1, 0, 0), P(0, 1, 0), P(1, 1, 0), P(0, 2, 0) };
             var normals = Enumerable.Repeat(Normal, 5).ToArray();
             var vx = points.Select((p, i) => new Vertex(i, 0, 0, 0)).ToArray();
 

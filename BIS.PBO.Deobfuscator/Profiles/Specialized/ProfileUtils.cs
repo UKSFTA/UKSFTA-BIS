@@ -1,3 +1,4 @@
+using BIS.PBO;
 using BIS.PBO.Deobfuscator;
 using System;
 using System.Collections.Generic;
@@ -72,8 +73,13 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             return results.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         }
 
+        /// <summary>
+        /// Accepts paths containing Cyrillic obfuscation chars (> 127) and wildcards (?/*)
+        /// which are common in obfuscated config.bin paths. Only rejects control chars
+        /// and the Unicode replacement character (bad UTF-8 decoding).
+        /// </summary>
         public static bool IsValidPathString(string s) =>
-            s.All(c => c >= 32 && c <= 126) && !s.Contains('?') && !s.Contains('*');
+            s.All(c => c >= 32 && c != '\uFFFD');
 
         private static void CollectStringValues(ParamClass cls, List<string> results, Regex pathPattern)
         {
@@ -213,8 +219,11 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
                 if (!string.IsNullOrEmpty(prefix))
                 {
                     var prefixClean = prefix.TrimEnd('/');
-                    if (normalized.StartsWith(prefixClean, StringComparison.OrdinalIgnoreCase))
-                        normalized = normalized.Substring(prefixClean.Length).TrimStart('/');
+                    // Only strip PBO prefix if followed by underscore to prevent
+                    // partial-word matches (e.g., prefix "avs" should not match
+                    // "avs_assault_vest" unless explicitly "avs_").
+                    if (normalized.StartsWith(prefixClean + "_", StringComparison.OrdinalIgnoreCase))
+                        normalized = normalized.Substring(prefixClean.Length + 1).TrimStart('/');
                 }
 
                 var words = normalized.Split('_')
@@ -232,6 +241,35 @@ namespace BIS.PBO.Deobfuscator.Profiles.Specialized
             }
 
             return map;
+        }
+
+        /// <summary>
+        /// Attempts to parse a PBO entry as a config file (binary raP or text format).
+        /// Returns null if the entry is not a valid config or an unrecoverable format.
+        /// Detection: first 4 bytes == \0raP → binary; otherwise → text.
+        /// </summary>
+        public static ParamFile? TryParseBinEntry(IPBOFileEntry entry)
+        {
+            using var stream = entry.OpenRead();
+            var header = new byte[4];
+            if (stream.Read(header, 0, 4) < 4)
+                return null;
+
+            stream.Position = 0;
+
+            // Binary raP format: starts with \0raP (0x00 'r' 'a' 'P')
+            if (header[0] == 0x00 && header[1] == 0x72 && header[2] == 0x61 && header[3] == 0x50)
+            {
+                return new ParamFile(stream);
+            }
+
+            // Text format: read to string, tokenize, parse (skip preprocessor —
+            // split configs like CfgFunctions rarely use #include)
+            using var reader = new StreamReader(stream);
+            var source = reader.ReadToEnd();
+            var tokens = ConfigTokenizer.Tokenize(source, entry.FileName);
+            var parser = new ConfigParser();
+            return parser.Parse(tokens);
         }
     }
 }

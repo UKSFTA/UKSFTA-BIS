@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BIS.PBO\BIS.PBO.csproj" />
     <ProjectReference Include="..\BIS.P3D\BIS.P3D.csproj" />
+    <ProjectReference Include="..\BIS.PAA\BIS.PAA.csproj" />
   </ItemGroup>
 
   <ItemGroup>

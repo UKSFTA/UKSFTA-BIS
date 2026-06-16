@@ -42,6 +42,7 @@ var root = new RootCommand("BIS file format CLI tool")
             new Argument<FileInfo>("path", "Path to .p3d file").ExistingOnly(),
             new Option<DirectoryInfo?>(["--output", "-o"], "Output directory for .blend file"),
             new Option<bool>(["--convert-paa"], "Pre-convert PAA textures to PNG (armaio handles in-Blender by default)"),
+            new Option<FileInfo?>(["--model-cfg"], "Path to model.cfg for skeleton/armature import"),
         },
         new Command("retx", "Re-texture a P3D model via Blender")
         {
@@ -158,7 +159,7 @@ foreach (var cmd in root.Children.OfType<Command>())
                     case "p3d info":         HandleP3DInfo(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "p3d convert":      HandleP3DConvert(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo?>(sub, parse, "--output")); break;
                     case "p3d roundtrip":    HandleP3DRoundtrip(GetFileArg(sub.Arguments.First(), parse).FullName); break;
-                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<bool>(sub, parse, "--convert-paa")); break;
+                    case "p3d export":       HandleP3DExport(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<DirectoryInfo?>(sub, parse, "--output"), GetOptVal<bool>(sub, parse, "--convert-paa"), GetOptVal<FileInfo?>(sub, parse, "--model-cfg")); break;
                     case "p3d retx":         HandleP3DRetexture(GetFileArg(sub.Arguments.First(), parse).FullName, GetOptVal<FileInfo>(sub, parse, "--remap"), GetOptVal<FileInfo?>(sub, parse, "--output"), GetOptVal<DirectoryInfo?>(sub, parse, "--texture-dir"), GetOptVal<string?>(sub, parse, "--lod")); break;
                     case "paa analyze":      HandlePAAAnalyze(GetFileArg(sub.Arguments.First(), parse).FullName); break;
                     case "paa suggest":      HandlePAASuggest(GetFileArg(sub.Arguments.First(), parse).FullName); break;
@@ -882,11 +883,14 @@ static void HandleP3DRoundtrip(string path)
     }
 }
 
-static void HandleP3DExport(string path, DirectoryInfo? outputDir, bool convertPaa)
+static void HandleP3DExport(string path, DirectoryInfo? outputDir, bool convertPaa, FileInfo? modelCfg = null)
 {
     string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
+    string? modelCfgPath = modelCfg?.FullName;
+    if (modelCfgPath != null)
+        AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
     AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
-    var task = BlenderHelper.ExportSingleAsync(path, outDir, convertPaa);
+    var task = BlenderHelper.ExportSingleAsync(path, outDir, convertPaa, modelCfgPath);
     bool ok = task.GetAwaiter().GetResult();
     if (ok)
         AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");

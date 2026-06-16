@@ -78,7 +78,7 @@ internal static class BlenderHelper
     /// Exports a single .p3d file to .blend format.
     /// PAA textures are decoded in-Blender via armaio (no pre-conversion needed).
     /// </summary>
-    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir, bool convertPaa = false)
+    public static async Task<bool> ExportSingleAsync(string p3dPath, string outputDir, bool convertPaa = false, string? modelCfgPath = null)
     {
         string extractRoot = DeriveExtractRoot(p3dPath);
         string? texturesDir = null;
@@ -92,7 +92,7 @@ internal static class BlenderHelper
         }
 
         // Generate single-model batch script
-        string scriptPath = BlenderExport.GenerateSingleModelScript(p3dPath, extractRoot, outputDir, texturesDir);
+        string scriptPath = BlenderExport.GenerateSingleModelScript(p3dPath, extractRoot, outputDir, texturesDir, modelCfgPath);
         Console.WriteLine($"  Generated script: {Path.GetFileName(scriptPath)}");
 
         // Run Blender

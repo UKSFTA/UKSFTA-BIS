@@ -133,10 +133,10 @@ namespace BIS.P3D.Export
 
             writer.WriteLine("try:");
             writer.WriteLine("    # Import model");
-            writer.WriteLine("    print(f\"[BIS] Importing {{os.path.basename(model_path)}}...\", flush=True)");
+            writer.WriteLine("    print(f\"[BIS] Importing {os.path.basename(model_path)}...\", flush=True)");
             writer.WriteLine("    bpy.ops.a3ob.import_p3d(filepath=model_path,");
             writer.WriteLine("        absolute_paths=True, enclose=True, groupby='TYPE',");
-            writer.WriteLine("        additional_data={{'NORMALS','PROPS','MASS','SELECTIONS','UV','MATERIALS'}},");
+            writer.WriteLine("        additional_data={'NORMALS','PROPS','MASS','SELECTIONS','UV','MATERIALS'},");
             writer.WriteLine("        proxy_action='SEPARATE', translate_selections=True)");
             writer.WriteLine("    print(\"[BIS] Import complete\", flush=True)");
             writer.WriteLine();
@@ -144,7 +144,7 @@ namespace BIS.P3D.Export
             // Collect P3D materials for processing
             writer.WriteLine("    # ─── Collect all P3D materials ───");
             writer.WriteLine("    p3d_mats = [m for m in bpy.data.materials if m.name.startswith('P3D:')]");
-            writer.WriteLine("    print(f\"[BIS] Found {{len(p3d_mats)}} P3D materials\", flush=True)");
+            writer.WriteLine("    print(f\"[BIS] Found {len(p3d_mats)} P3D materials\", flush=True)");
             writer.WriteLine();
 
             // LOD filter: restrict remapping to specific LOD type
@@ -164,11 +164,11 @@ namespace BIS.P3D.Export
                 writer.WriteLine("            if slot.material and slot.material.name.startswith('P3D:'):");
                 writer.WriteLine("                if slot.material.name not in mat_lod:");
                 writer.WriteLine("                    mat_lod[slot.material.name] = lod_type");
-                writer.WriteLine("    lod_filter = \"{lodFilterUpper}\"");
+                writer.WriteLine($"    lod_filter = \"{lodFilterUpper}\"");
                 writer.WriteLine("    before = len(p3d_mats)");
                 writer.WriteLine("    p3d_mats = [m for m in p3d_mats if mat_lod.get(m.name, '') == lod_filter]");
                 writer.WriteLine("    after = len(p3d_mats)");
-                writer.WriteLine("    print(f\"[BIS] LOD filter [{lodFilterUpper}]: {{before}} -> {{after}} materials\", flush=True)");
+                writer.WriteLine($"    print(f\"[BIS] LOD filter [{lodFilterUpper}]: {{before}} -> {{after}} materials\", flush=True)");
                 writer.WriteLine();
             }
 
@@ -177,19 +177,19 @@ namespace BIS.P3D.Export
             {
                 writer.WriteLine("    # ─── Load PAA textures via armaio ───");
                 writer.WriteLine("    loaded = _load_paa_textures(tex_dir, p3d_mats)");
-                writer.WriteLine("    print(f\"[BIS] Loaded {{loaded}} PAA textures\", flush=True)");
+                writer.WriteLine("    print(f\"[BIS] Loaded {loaded} PAA textures\", flush=True)");
                 writer.WriteLine();
             }
 
             // Apply remapping
             writer.WriteLine("    # ─── Apply texture/material remapping ───");
-            writer.WriteLine("    tex_exact = remap.get('textures', {{}})");
-            writer.WriteLine("    tex_prefix = remap.get('texture_prefixes', {{}})");
-            writer.WriteLine("    tex_suffix = remap.get('texture_suffixes', {{}})");
-            writer.WriteLine("    mat_exact = remap.get('materials', {{}})");
-            writer.WriteLine("    mat_prefix = remap.get('material_prefixes', {{}})");
-            writer.WriteLine("    mat_suffix = remap.get('material_suffixes', {{}})");
-            writer.WriteLine("    col_map = remap.get('color_types', {{}})");
+            writer.WriteLine("    tex_exact = remap.get('textures', {})");
+            writer.WriteLine("    tex_prefix = remap.get('texture_prefixes', {})");
+            writer.WriteLine("    tex_suffix = remap.get('texture_suffixes', {})");
+            writer.WriteLine("    mat_exact = remap.get('materials', {})");
+            writer.WriteLine("    mat_prefix = remap.get('material_prefixes', {})");
+            writer.WriteLine("    mat_suffix = remap.get('material_suffixes', {})");
+            writer.WriteLine("    col_map = remap.get('color_types', {})");
             writer.WriteLine();
             writer.WriteLine("    tex_count = 0");
             writer.WriteLine("    mat_count = 0");
@@ -200,14 +200,14 @@ namespace BIS.P3D.Export
             writer.WriteLine("        # Remap texture path");
             writer.WriteLine("        new_tex = _remap_path(props.texture_path, tex_exact, tex_prefix, tex_suffix)");
             writer.WriteLine("        if new_tex is not None and new_tex != props.texture_path:");
-            writer.WriteLine("            print(f\"[BIS]   Tex: {{props.texture_path}} -> {{new_tex}}\", flush=True)");
+            writer.WriteLine("            print(f\"[BIS]   Tex: {props.texture_path} -> {new_tex}\", flush=True)");
             writer.WriteLine("            props.texture_path = new_tex");
             writer.WriteLine("            tex_count += 1");
             writer.WriteLine();
             writer.WriteLine("        # Remap material (rvmat) path");
             writer.WriteLine("        new_mat = _remap_path(props.material_path, mat_exact, mat_prefix, mat_suffix)");
             writer.WriteLine("        if new_mat is not None and new_mat != props.material_path:");
-            writer.WriteLine("            print(f\"[BIS]   Mat: {{props.material_path}} -> {{new_mat}}\", flush=True)");
+            writer.WriteLine("            print(f\"[BIS]   Mat: {props.material_path} -> {new_mat}\", flush=True)");
             writer.WriteLine("            props.material_path = new_mat");
             writer.WriteLine("            mat_count += 1");
             writer.WriteLine();
@@ -215,20 +215,20 @@ namespace BIS.P3D.Export
             writer.WriteLine("        old_col = props.color_type");
             writer.WriteLine("        if old_col and old_col in col_map:");
             writer.WriteLine("            new_col = col_map[old_col]");
-            writer.WriteLine("            print(f\"[BIS]   Color: {{old_col}} -> {{new_col}}\", flush=True)");
+            writer.WriteLine("            print(f\"[BIS]   Color: {old_col} -> {new_col}\", flush=True)");
             writer.WriteLine("            props.color_type = new_col");
             writer.WriteLine("            col_count += 1");
             writer.WriteLine();
             writer.WriteLine("    parts = []");
-            writer.WriteLine("    if tex_count: parts.append(f'{{tex_count}} tex')");
-            writer.WriteLine("    if mat_count: parts.append(f'{{mat_count}} mat')");
-            writer.WriteLine("    if col_count: parts.append(f'{{col_count}} color')");
-            writer.WriteLine("    print(f\"[BIS] Remapped {{', '.join(parts) or 'nothing'}}\", flush=True)");
+            writer.WriteLine("    if tex_count: parts.append(f'{tex_count} tex')");
+            writer.WriteLine("    if mat_count: parts.append(f'{mat_count} mat')");
+            writer.WriteLine("    if col_count: parts.append(f'{col_count} color')");
+            writer.WriteLine("    print(f\"[BIS] Remapped {', '.join(parts) or 'nothing'}\", flush=True)");
             writer.WriteLine();
-
+            writer.WriteLine();
             // Re-export
             writer.WriteLine("    # Export modified model");
-            writer.WriteLine("    print(f\"[BIS] Exporting to {{output_path}}...\", flush=True)");
+            writer.WriteLine("    print(f\"[BIS] Exporting to {output_path}...\", flush=True)");
             writer.WriteLine("    bpy.ops.a3ob.export_p3d(filepath=output_path,");
             writer.WriteLine("        relative_paths=True, preserve_normals=True,");
             writer.WriteLine("        validate_meshes=False, use_selection=False,");
@@ -236,11 +236,11 @@ namespace BIS.P3D.Export
             writer.WriteLine("        apply_modifiers=True, sort_sections=True,");
             writer.WriteLine("        lod_collisions='FAIL', force_lowercase=True,");
             writer.WriteLine("        generate_components=True)");
-            writer.WriteLine("    print(f\"[BIS] Exported {{os.path.basename(output_path)}}\", flush=True)");
+            writer.WriteLine("    print(f\"[BIS] Exported {os.path.basename(output_path)}\", flush=True)");
             writer.WriteLine();
 
             writer.WriteLine("except Exception as e:");
-            writer.WriteLine("    print(f\"[BIS] Failed: {{e}}\", flush=True)");
+            writer.WriteLine("    print(f\"[BIS] Failed: {e}\", flush=True)");
             writer.WriteLine("    traceback.print_exc()");
             writer.WriteLine("    sys.exit(1)");
             writer.WriteLine();

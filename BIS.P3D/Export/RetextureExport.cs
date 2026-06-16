@@ -1,24 +1,22 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
 
 namespace BIS.P3D.Export
 {
-    /// <summary>
-    /// Generates Blender Python scripts that:
-    /// 1. Import a P3D model via a3ob
-    /// 2. Apply texture/material path remapping from a JSON config
-    /// 3. Re-export the modified P3D
-    /// </summary>
     public static class RetextureExport
     {
         /// <summary>
         /// Generates a Blender Python script for re-texturing a P3D model.
-        /// The script imports the model, applies the remap, and re-exports.
-        /// Returns the path to the generated script.
+        /// The script imports the model, applies the remap (supports exact,
+        /// prefix, and suffix pattern matching), and re-exports.
         /// </summary>
-        public static string GenerateRetextureScript(string modelPath, string remapPath, string outputPath)
+        /// <param name="modelPath">Path to source .p3d</param>
+        /// <param name="remapPath">Path to JSON remap config</param>
+        /// <param name="outputPath">Output .p3d path</param>
+        /// <param name="textureDir">Optional path to load PAA textures from (uses armaio)</param>
+        /// <returns>Path to the generated script</returns>
+        public static string GenerateRetextureScript(
+            string modelPath, string remapPath, string outputPath, string? textureDir = null)
         {
             string remapJson = File.ReadAllText(remapPath);
             string scriptDir = Path.GetDirectoryName(outputPath) ?? ".";
@@ -33,6 +31,21 @@ namespace BIS.P3D.Export
             writer.WriteLine("import traceback");
             writer.WriteLine();
 
+            // Optional armaio PAA loading
+            if (textureDir != null)
+            {
+                string pyTexDir = textureDir.Replace("\\", "/");
+                writer.WriteLine("# Load PAA textures via armaio");
+                writer.WriteLine("try:");
+                writer.WriteLine("    import armaio");
+                writer.WriteLine("    load_paa = True");
+                writer.WriteLine("except ImportError:");
+                writer.WriteLine("    print('[BIS] armaio not available, PAA textures will be missing', flush=True)");
+                writer.WriteLine("    load_paa = False");
+                writer.WriteLine($"tex_dir = r\"{pyTexDir}\"");
+                writer.WriteLine();
+            }
+
             writer.WriteLine("# Enable a3ob addon");
             writer.WriteLine("bpy.ops.preferences.addon_enable(module=\"bl_ext.blender_org.Arma3ObjectBuilder\")");
             writer.WriteLine();
@@ -44,9 +57,77 @@ namespace BIS.P3D.Export
             writer.WriteLine($"output_path = r\"{pyOutputPath}\"");
             writer.WriteLine();
 
-            // Embed the remap JSON directly in the script (avoids file dependency at runtime)
             writer.WriteLine("# Texture/material remap configuration");
             writer.WriteLine($"remap = {remapJson}");
+            writer.WriteLine();
+
+            writer.WriteLine("def _remap_path(path, table, prefix_map, suffix_map):");
+            writer.WriteLine("    \"\"\"Remap path using exact, prefix, then suffix matching.\"\"\"");
+            writer.WriteLine("    if not path:");
+            writer.WriteLine("        return None");
+            writer.WriteLine("    norm = path.replace('\\\\', '/')");
+            writer.WriteLine();
+            writer.WriteLine("    # 1) Exact match");
+            writer.WriteLine("    if table and norm in table:");
+            writer.WriteLine("        return table[norm]");
+            writer.WriteLine();
+            writer.WriteLine("    # 2) Prefix match (longest first)");
+            writer.WriteLine("    if prefix_map:");
+            writer.WriteLine("        sorted_pfx = sorted(prefix_map.keys(), key=len, reverse=True)");
+            writer.WriteLine("        for pfx in sorted_pfx:");
+            writer.WriteLine("            pfx_norm = pfx.replace('\\\\', '/')");
+            writer.WriteLine("            if norm.startswith(pfx_norm):");
+            writer.WriteLine("                suffix = norm[len(pfx_norm):]");
+            writer.WriteLine("                return prefix_map[pfx].replace('\\\\', '/') + suffix");
+            writer.WriteLine();
+            writer.WriteLine("    # 3) Suffix match (longest first)");
+            writer.WriteLine("    if suffix_map:");
+            writer.WriteLine("        sorted_sfx = sorted(suffix_map.keys(), key=len, reverse=True)");
+            writer.WriteLine("        for sfx in sorted_sfx:");
+            writer.WriteLine("            sfx_norm = sfx.replace('\\\\', '/')");
+            writer.WriteLine("            if norm.endswith(sfx_norm):");
+            writer.WriteLine("                head = norm[:-len(sfx_norm)]");
+            writer.WriteLine("                return head + suffix_map[sfx].replace('\\\\', '/')");
+            writer.WriteLine();
+            writer.WriteLine("    return None");
+            writer.WriteLine();
+
+            writer.WriteLine("def _load_paa_textures(tex_dir, materials):");
+            writer.WriteLine("    \"\"\"Load PAA textures from tex_dir into Blender images via armaio.\"\"\"");
+            writer.WriteLine("    if not os.path.isdir(tex_dir):");
+            writer.WriteLine("        print(f'[BIS] Texture dir not found: {tex_dir}', flush=True)");
+            writer.WriteLine("        return 0");
+            writer.WriteLine("    if not load_paa:");
+            writer.WriteLine("        return 0");
+            writer.WriteLine("    from armaio.paa.pillow import open_paa_image");
+            writer.WriteLine("    from PIL import Image");
+            writer.WriteLine("    import numpy as np");
+            writer.WriteLine("    count = 0");
+            writer.WriteLine("    seen = set()");
+            writer.WriteLine("    for mat in materials:");
+            writer.WriteLine("        if not mat.name.startswith('P3D:'):");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        tex = mat.a3ob_properties_material.texture_path");
+            writer.WriteLine("        if not tex or tex in seen:");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        seen.add(tex)");
+            writer.WriteLine("        tex_name = os.path.basename(tex)");
+            writer.WriteLine("        tex_path = os.path.join(tex_dir, tex_name)");
+            writer.WriteLine("        if not os.path.isfile(tex_path) and not tex_name.endswith('.paa'):");
+            writer.WriteLine("            tex_path = tex_path + '.paa'");
+            writer.WriteLine("        if not os.path.isfile(tex_path):");
+            writer.WriteLine("            continue");
+            writer.WriteLine("        try:");
+            writer.WriteLine("            pil_img = open_paa_image(tex_path)");
+            writer.WriteLine("            img = bpy.data.images.new(tex_name, pil_img.width, pil_img.height, alpha=True)");
+            writer.WriteLine("            img.filepath = tex_path");
+            writer.WriteLine("            pixels = np.array(pil_img.convert('RGBA'), dtype=np.float32) / 255.0");
+            writer.WriteLine("            img.pixels = pixels.ravel()");
+            writer.WriteLine("            img.update()");
+            writer.WriteLine("            count += 1");
+            writer.WriteLine("        except Exception as e:");
+            writer.WriteLine("            print(f'[BIS]   Failed to load {tex_path}: {e}', flush=True)");
+            writer.WriteLine("    return count");
             writer.WriteLine();
 
             writer.WriteLine("try:");
@@ -59,42 +140,64 @@ namespace BIS.P3D.Export
             writer.WriteLine("    print(\"[BIS] Import complete\", flush=True)");
             writer.WriteLine();
 
-            writer.WriteLine("    # ─── Apply texture remapping ───");
-            writer.WriteLine("    # Walk all P3D materials and remap their texture/material paths.");
+            // Collect P3D materials for processing
+            writer.WriteLine("    # ─── Collect all P3D materials ───");
+            writer.WriteLine("    p3d_mats = [m for m in bpy.data.materials if m.name.startswith('P3D:')]");
+            writer.WriteLine("    print(f\"[BIS] Found {{len(p3d_mats)}} P3D materials\", flush=True)");
+            writer.WriteLine();
+
+            // Load PAA textures if textureDir provided
+            if (textureDir != null)
+            {
+                writer.WriteLine("    # ─── Load PAA textures via armaio ───");
+                writer.WriteLine("    loaded = _load_paa_textures(tex_dir, p3d_mats)");
+                writer.WriteLine("    print(f\"[BIS] Loaded {{loaded}} PAA textures\", flush=True)");
+                writer.WriteLine();
+            }
+
+            // Apply remapping
+            writer.WriteLine("    # ─── Apply texture/material remapping ───");
+            writer.WriteLine("    tex_exact = remap.get('textures', {{}})");
+            writer.WriteLine("    tex_prefix = remap.get('texture_prefixes', {{}})");
+            writer.WriteLine("    tex_suffix = remap.get('texture_suffixes', {{}})");
+            writer.WriteLine("    mat_exact = remap.get('materials', {{}})");
+            writer.WriteLine("    mat_prefix = remap.get('material_prefixes', {{}})");
+            writer.WriteLine("    mat_suffix = remap.get('material_suffixes', {{}})");
+            writer.WriteLine("    col_map = remap.get('color_types', {{}})");
+            writer.WriteLine();
             writer.WriteLine("    tex_count = 0");
             writer.WriteLine("    mat_count = 0");
-            writer.WriteLine("    for mat in bpy.data.materials:");
-            writer.WriteLine("        if mat.name.startswith('P3D:'):");
-            writer.WriteLine("            props = mat.a3ob_properties_material");
-
-            // Texture path remapping
-            writer.WriteLine("            # Remap texture path");
-            writer.WriteLine("            old_tex = props.texture_path");
-            writer.WriteLine("            if old_tex and old_tex in remap.get('textures', {}):");
-            writer.WriteLine("                new_tex = remap['textures'][old_tex]");
-            writer.WriteLine("                print(f\"[BIS]   Remap tex: {{old_tex}} -> {{new_tex}}\", flush=True)");
-            writer.WriteLine("                props.texture_path = new_tex");
-            writer.WriteLine("                tex_count += 1");
-
-            // Material path remapping
-            writer.WriteLine("            # Remap material (rvmat) path");
-            writer.WriteLine("            old_mat = props.material_path");
-            writer.WriteLine("            if old_mat and old_mat in remap.get('materials', {}):");
-            writer.WriteLine("                new_mat = remap['materials'][old_mat]");
-            writer.WriteLine("                print(f\"[BIS]   Remap mat: {{old_mat}} -> {{new_mat}}\", flush=True)");
-            writer.WriteLine("                props.material_path = new_mat");
-            writer.WriteLine("                mat_count += 1");
-
-            // Color type remapping
-            writer.WriteLine("            # Remap color type");
-            writer.WriteLine("            old_color = props.color_type");
-            writer.WriteLine("            if old_color and old_color in remap.get('color_types', {}):");
-            writer.WriteLine("                new_color = remap['color_types'][old_color]");
-            writer.WriteLine("                print(f\"[BIS]   Remap color: {{old_color}} -> {{new_color}}\", flush=True)");
-            writer.WriteLine("                props.color_type = new_color");
-
+            writer.WriteLine("    col_count = 0");
+            writer.WriteLine("    for mat in p3d_mats:");
+            writer.WriteLine("        props = mat.a3ob_properties_material");
             writer.WriteLine();
-            writer.WriteLine("    print(f\"[BIS] Remapped {{tex_count}} texture(s), {{mat_count}} material(s)\", flush=True)");
+            writer.WriteLine("        # Remap texture path");
+            writer.WriteLine("        new_tex = _remap_path(props.texture_path, tex_exact, tex_prefix, tex_suffix)");
+            writer.WriteLine("        if new_tex is not None and new_tex != props.texture_path:");
+            writer.WriteLine("            print(f\"[BIS]   Tex: {{props.texture_path}} -> {{new_tex}}\", flush=True)");
+            writer.WriteLine("            props.texture_path = new_tex");
+            writer.WriteLine("            tex_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("        # Remap material (rvmat) path");
+            writer.WriteLine("        new_mat = _remap_path(props.material_path, mat_exact, mat_prefix, mat_suffix)");
+            writer.WriteLine("        if new_mat is not None and new_mat != props.material_path:");
+            writer.WriteLine("            print(f\"[BIS]   Mat: {{props.material_path}} -> {{new_mat}}\", flush=True)");
+            writer.WriteLine("            props.material_path = new_mat");
+            writer.WriteLine("            mat_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("        # Remap color type");
+            writer.WriteLine("        old_col = props.color_type");
+            writer.WriteLine("        if old_col and old_col in col_map:");
+            writer.WriteLine("            new_col = col_map[old_col]");
+            writer.WriteLine("            print(f\"[BIS]   Color: {{old_col}} -> {{new_col}}\", flush=True)");
+            writer.WriteLine("            props.color_type = new_col");
+            writer.WriteLine("            col_count += 1");
+            writer.WriteLine();
+            writer.WriteLine("    parts = []");
+            writer.WriteLine("    if tex_count: parts.append(f'{{tex_count}} tex')");
+            writer.WriteLine("    if mat_count: parts.append(f'{{mat_count}} mat')");
+            writer.WriteLine("    if col_count: parts.append(f'{{col_count}} color')");
+            writer.WriteLine("    print(f\"[BIS] Remapped {{', '.join(parts) or 'nothing'}}\", flush=True)");
             writer.WriteLine();
 
             // Re-export

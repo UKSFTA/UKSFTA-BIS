@@ -154,6 +154,7 @@ namespace BIS.P3D.Conversion
         private static void WriteLOD(BinaryWriterEx w, P3DM_LOD mlodLod, int version)
         {
             var nVerts = mlodLod.Points.Length;
+            Action<string> logPos = (label) => Console.Error.WriteLine($"[MLOD2ODOL] WriteLOD {label}: {w.Position}");
 
             float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
             float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
@@ -181,6 +182,7 @@ namespace BIS.P3D.Conversion
 
             // 1-3. Proxies, SubSkeletonsToSkeleton, SkeletonToSubSkeleton (empty)
             w.Write(0); w.Write(0); w.Write(0);
+            logPos("after_proxies");
 
             if (version >= 50) w.Write((uint)nVerts);
             else w.WriteCondensedIntArray((int[])[]);
@@ -192,23 +194,29 @@ namespace BIS.P3D.Conversion
                 Math.Pow((maxX - minX) / 2f, 2) +
                 Math.Pow((maxY - minY) / 2f, 2) +
                 Math.Pow((maxZ - minZ) / 2f, 2)));
+            logPos("after_bounds");
 
             // Textures
             w.WriteArray(texArr, (b, t) => b.WriteAsciiz(t));
+            logPos("after_textures");
 
             // Materials
             w.Write(materials.Count);
             foreach (var mn in materials) WriteEmbeddedMaterial(w, mn);
+            logPos("after_materials");
 
             // PointToVertex / VertexToPoint (identity)
             WriteCompressedVertexIndexArray(w, version, Enumerable.Range(0, nVerts).ToArray());
             WriteCompressedVertexIndexArray(w, version, Enumerable.Range(0, nVerts).ToArray());
+            logPos("after_p2v_v2p");
 
             // Polygons
             WritePolygons(w, mlodLod, version);
+            logPos("after_polygons");
 
             // Sections
             WriteSections(w, mlodLod, texArr, textureIdxMap, materialIdxMap, version);
+            logPos("after_sections");
 
             // NamedSelections
             var nsTaggs = mlodLod.Taggs.OfType<NamedSelectionTagg>().ToArray();
@@ -223,11 +231,13 @@ namespace BIS.P3D.Conversion
                 w.Write(0);
                 w.WriteCompressed((byte[])[]);
             }
+            logPos("after_named_selections");
 
             // NamedProperties
             var propTaggs = mlodLod.Taggs.OfType<PropertyTagg>().ToArray();
             w.Write(propTaggs.Length);
-            foreach (var pt in propTaggs) { w.WriteAsciiz(pt.PropertyName); w.WriteAsciiz(pt.Value); }
+            foreach (var pt in propTaggs) { w.WriteAsciiz(pt.PropertyName.TrimEnd('\0')); w.WriteAsciiz(pt.Value.TrimEnd('\0')); }
+            logPos("after_properties");
 
             // Frames (empty)
             w.Write(0);
@@ -236,6 +246,7 @@ namespace BIS.P3D.Conversion
             // Rest data block
             var restPos = w.Position;
             w.Write(0u);
+            logPos("after_rest_header");
 
             if (version >= 50) w.WriteCondensedIntArray((int[])[]); // Clip (empty)
 
@@ -314,7 +325,7 @@ namespace BIS.P3D.Conversion
             foreach (var face in faces)
             {
                 var verts = face.Vertices;
-                var count = face.VertexCount;
+                var count = Math.Min(face.VertexCount, verts.Length); // clamp: broken MLODs may have count > actual verts
                 w.Write((byte)count);
                 for (int i = count - 1; i >= 0; i--) // reverse winding
                     if (version >= 69) w.Write(verts[i].PointIndex);
@@ -369,7 +380,8 @@ namespace BIS.P3D.Conversion
                 for (int f = 0; f < fuvs.Length && f < lod.Faces.Length; f++)
                 {
                     var face = lod.Faces[f];
-                    for (int v = 0; v < face.VertexCount; v++)
+                    int count = Math.Min(face.VertexCount, face.Vertices.Length);
+                    for (int v = 0; v < count; v++)
                     {
                         int pi = face.Vertices[v].PointIndex;
                         if (pi >= 0 && pi < nVerts && !hasUV[pi])
@@ -384,7 +396,9 @@ namespace BIS.P3D.Conversion
             else
             {
                 foreach (var face in lod.Faces)
-                    for (int v = 0; v < face.VertexCount; v++)
+                {
+                    int count = Math.Min(face.VertexCount, face.Vertices.Length);
+                    for (int v = 0; v < count; v++)
                     {
                         int pi = face.Vertices[v].PointIndex;
                         if (pi >= 0 && pi < nVerts && !hasUV[pi])
@@ -393,6 +407,7 @@ namespace BIS.P3D.Conversion
                             hasUV[pi] = true;
                         }
                     }
+                }
             }
         }
 

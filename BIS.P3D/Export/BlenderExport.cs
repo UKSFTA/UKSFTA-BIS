@@ -103,7 +103,8 @@ namespace BIS.P3D.Export
 
         /// <summary>
         /// Builds a texture dictionary in C# as a Python dict literal string.
-        /// Scans the extracted dir and optional textures dir (PNG pre-conversions).
+        /// Scans the extracted dir for PAAs (primary, via armaio) and PNGs (fallback).
+        /// PAA entries take priority over PNGs for same-named files.
         /// Returns: string containing the Python dict literal with all image entries.
         /// </summary>
         private static string BuildImageDictLiteral(string extractedDir, string? texturesDir)
@@ -111,52 +112,42 @@ namespace BIS.P3D.Export
             var dict = new Dictionary<string, (string path, string type)>(StringComparer.OrdinalIgnoreCase);
             int count = 0;
 
-            // Scan extracted dir for PAAs
-            foreach (var f in Directory.GetFiles(extractedDir, "*.paa", SearchOption.AllDirectories))
-            {
-                string key = Path.GetFileName(f).ToLowerInvariant();
-                // Basename key (first wins — fallback for textures without directory context)
-                if (!dict.ContainsKey(key))
-                {
-                    dict[key] = (f, "PAA");
-                    count++;
-                }
-                // Full relative path key (always unique — used for rvmat-directed resolution)
-                string relKey = GetRelativePath(extractedDir, f).Replace('\\', '/').ToLowerInvariant();
-                if (!dict.ContainsKey(relKey))
-                {
-                    dict[relKey] = (f, "PAA");
-                }
-            }
-
-            // Scan extracted dir for PNGs
+            // Scan extracted dir for PNGs first (PAA overwrites below)
             foreach (var f in Directory.GetFiles(extractedDir, "*.png", SearchOption.AllDirectories))
             {
                 string key = Path.GetFileName(f).ToLowerInvariant();
-                // Basename key (first wins)
                 if (!dict.ContainsKey(key))
                 {
                     dict[key] = (f, "PNG");
                     count++;
                 }
-                // Full relative path key (always unique)
                 string relKey = GetRelativePath(extractedDir, f).Replace('\\', '/').ToLowerInvariant();
                 if (!dict.ContainsKey(relKey))
-                {
                     dict[relKey] = (f, "PNG");
-                }
             }
 
-            // Scan texture dir for PNGs (PNG prefs, may overwrite PAA entries)
+            // Scan extracted dir for PAAs — overwrite PNG entries (armaio decodes PAA directly)
+            foreach (var f in Directory.GetFiles(extractedDir, "*.paa", SearchOption.AllDirectories))
+            {
+                string key = Path.GetFileName(f).ToLowerInvariant();
+                bool isNew = !dict.ContainsKey(key);
+                dict[key] = (f, "PAA");
+                if (isNew) count++;
+                string relKey = GetRelativePath(extractedDir, f).Replace('\\', '/').ToLowerInvariant();
+                dict[relKey] = (f, "PAA");
+            }
+
+            // Scan optional textures dir for PNGs — only add if no PAA already exists
             if (texturesDir != null && Directory.Exists(texturesDir))
             {
                 foreach (var f in Directory.GetFiles(texturesDir, "*.png", SearchOption.AllDirectories))
                 {
                     string key = Path.GetFileName(f).ToLowerInvariant();
-                    dict[key] = (f, "PNG");
-                    // Full relative path key (overwrite for textures dir)
+                    if (!dict.ContainsKey(key) || dict[key].type != "PAA")
+                        dict[key] = (f, "PNG");
                     string relKey = GetRelativePath(texturesDir, f).Replace('\\', '/').ToLowerInvariant();
-                    dict[relKey] = (f, "PNG");
+                    if (!dict.ContainsKey(relKey) || dict[relKey].type != "PAA")
+                        dict[relKey] = (f, "PNG");
                 }
             }
 
@@ -181,17 +172,17 @@ namespace BIS.P3D.Export
         {
             writer.WriteLine("def resolve_tex(tex_ref, rvmat_dir=None):");
             writer.WriteLine("    tex_ref_clean = tex_ref.replace('\\\\', '/')");
-            writer.WriteLine("    # Strip existing extension first, then try PNG then PAA");
-            writer.WriteLine("    without_ext = tex_ref_clean[:-4] if tex_ref_clean.lower().endswith(('.png', '.paa')) else tex_ref_clean");
+            writer.WriteLine("    # Strip existing extension first, then try PAA then PNG");
+            writer.WriteLine("    without_ext = tex_ref_clean[:-4] if tex_ref_clean.lower().endswith(('.paa', '.png')) else tex_ref_clean");
             writer.WriteLine("    # First: use rvmat directory context to resolve the correct texture");
             writer.WriteLine("    # (different directories can have same-named files with different content)");
             writer.WriteLine("    if rvmat_dir:");
-            writer.WriteLine("        for ext in ['.png', '.paa']:");
+            writer.WriteLine("        for ext in ['.paa', '.png']:");
             writer.WriteLine("            full_key = f\"{rvmat_dir}/{without_ext}{ext}\".lower()");
             writer.WriteLine("            if full_key in image_dict:");
             writer.WriteLine("                return image_dict[full_key]");
             writer.WriteLine("    # Fallback: basename lookup");
-            writer.WriteLine("    for ext in ['.png', '.paa']:");
+            writer.WriteLine("    for ext in ['.paa', '.png']:");
             writer.WriteLine("        key = without_ext + ext");
             writer.WriteLine("        basename = os.path.basename(key).lower()");
             writer.WriteLine("        if basename in image_dict:");
@@ -199,49 +190,65 @@ namespace BIS.P3D.Export
             writer.WriteLine("    return None");
             writer.WriteLine();
 
+            writer.WriteLine("def load_image_pil(path, img_name):");
+            writer.WriteLine("    from PIL import Image");
+            writer.WriteLine("    import numpy as np");
+            writer.WriteLine("    pil_img = Image.open(path).convert('RGBA')");
+            writer.WriteLine("    width, height = pil_img.size");
+            writer.WriteLine("    pixels = np.array(pil_img).astype(float) / 255.0");
+            writer.WriteLine("    # Flip rows: Blender expects bottom-to-top, PIL gives top-to-bottom");
+            writer.WriteLine("    pixels = np.flip(pixels, axis=0)");
+            writer.WriteLine("    img = bpy.data.images.new(img_name, width=width, height=height, alpha=True)");
+            writer.WriteLine("    img.pixels = pixels.flatten().tolist()");
+            writer.WriteLine("    img.pack()");
+            writer.WriteLine("    return img, width, height");
+            writer.WriteLine();
             writer.WriteLine("def load_image(path, source_type):");
-            writer.WriteLine("    if source_type == 'PNG':");
-            writer.WriteLine("        try:");
-            writer.WriteLine("            from PIL import Image");
-            writer.WriteLine("            import numpy as np");
-            writer.WriteLine("            pil_img = Image.open(path).convert('RGBA')");
+            writer.WriteLine("    # Rename stale image first to avoid basename collision");
+            writer.WriteLine("    # (different directories can have same-named textures with different content)");
+            writer.WriteLine("    img_name = os.path.basename(path)");
+            writer.WriteLine("    old = bpy.data.images.get(img_name)");
+            writer.WriteLine("    if old:");
+            writer.WriteLine("        old.name = f\"__old_{img_name}\"");
+            writer.WriteLine("    try:");
+            writer.WriteLine("        if source_type == 'PAA':");
+            writer.WriteLine("            # Fast PAA decode via armaio (avoids ~4.5s a3ob.import_paa overhead)");
+            writer.WriteLine("            from armaio.paa.pillow import open_paa_image");
+            writer.WriteLine("            pil_img = open_paa_image(path)");
             writer.WriteLine("            width, height = pil_img.size");
-            writer.WriteLine("            img_name = os.path.basename(path)");
-            writer.WriteLine("            # Rename stale image first to avoid basename collision");
-            writer.WriteLine("            # (different directories can have same-named textures with different content)");
-            writer.WriteLine("            old = bpy.data.images.get(img_name)");
-            writer.WriteLine("            if old:");
-            writer.WriteLine("                old.name = f\"__old_{img_name}\"");
+            writer.WriteLine("            import numpy as np");
             writer.WriteLine("            pixels = np.array(pil_img).astype(float) / 255.0");
-            writer.WriteLine("            # Flip rows: Blender expects bottom-to-top, PIL gives top-to-bottom");
             writer.WriteLine("            pixels = np.flip(pixels, axis=0)");
             writer.WriteLine("            img = bpy.data.images.new(img_name, width=width, height=height, alpha=True)");
             writer.WriteLine("            img.pixels = pixels.flatten().tolist()");
             writer.WriteLine("            img.pack()");
+            writer.WriteLine("            print(f\"[BIS]   Packed {img_name} via armaio ({width}x{height})\", flush=True)");
+            writer.WriteLine("            return img");
+            writer.WriteLine("        else:");
+            writer.WriteLine("            # PNG via PIL");
+            writer.WriteLine("            img, width, height = load_image_pil(path, img_name)");
             writer.WriteLine("            print(f\"[BIS]   Packed {img_name} via PIL ({width}x{height})\", flush=True)");
             writer.WriteLine("            return img");
-            writer.WriteLine("        except Exception as e:");
-            writer.WriteLine("            print(f\"[BIS]   PIL load failed for {path}: {e}\", flush=True)");
-            writer.WriteLine("            img = bpy.data.images.load(path)");
-            writer.WriteLine("            print(f\"[BIS]   Fallback loaded {img.name}, has_data={img.has_data}, size={img.size[0]}x{img.size[1]}\", flush=True)");
-            writer.WriteLine("            if not img.has_data:");
-            writer.WriteLine("                img.pack()");
-            writer.WriteLine("                print(f\"[BIS]   Packed {img.name}\", flush=True)");
-            writer.WriteLine("            return img");
-            writer.WriteLine("    # PAA loading: rename stale image first to avoid basename collision");
-            writer.WriteLine("    # (different directories can have same-named PAAs with different content)");
-            writer.WriteLine("    try:");
-            writer.WriteLine("        img_name = os.path.basename(path)");
-            writer.WriteLine("        old_img = bpy.data.images.get(img_name)");
-            writer.WriteLine("        if old_img:");
-            writer.WriteLine("            old_img.name = f\"__old_{img_name}\"");
-            writer.WriteLine("        bpy.ops.a3ob.import_paa(filepath=path)");
-            writer.WriteLine("        img = bpy.data.images.get(img_name)");
-            writer.WriteLine("        if img and hasattr(img, 'filepath_raw'):");
-            writer.WriteLine("            img.filepath_raw = path");
-            writer.WriteLine("        return img");
-            writer.WriteLine("    except Exception:");
-            writer.WriteLine("        return None");
+            writer.WriteLine("    except Exception as e:");
+            writer.WriteLine("        print(f\"[BIS]   {source_type} load failed for {path}: {e}\", flush=True)");
+            writer.WriteLine("        # Fallback: a3ob.import_paa or blender native load");
+            writer.WriteLine("        if source_type == 'PAA':");
+            writer.WriteLine("            try:");
+            writer.WriteLine("                bpy.ops.a3ob.import_paa(filepath=path)");
+            writer.WriteLine("                img = bpy.data.images.get(img_name)");
+            writer.WriteLine("                if img and hasattr(img, 'filepath_raw'):");
+            writer.WriteLine("                    img.filepath_raw = path");
+            writer.WriteLine("                return img");
+            writer.WriteLine("            except Exception:");
+            writer.WriteLine("                return None");
+            writer.WriteLine("        else:");
+            writer.WriteLine("            try:");
+            writer.WriteLine("                img = bpy.data.images.load(path)");
+            writer.WriteLine("                if not img.has_data:");
+            writer.WriteLine("                    img.pack()");
+            writer.WriteLine("                return img");
+            writer.WriteLine("            except Exception:");
+            writer.WriteLine("                return None");
             writer.WriteLine();
 
             writer.WriteLine("def assign_texture(material, color_ref):");
@@ -311,29 +318,25 @@ namespace BIS.P3D.Export
             writer.WriteLine("        return");
             writer.WriteLine();
             writer.WriteLine("    # ─── Organize LOD collections ───");
-            writer.WriteLine("    # A3OB imports with groupby='TYPE', creating collections named by LOD resolution");
-            writer.WriteLine("    # Map these to human-readable Arma standard names and parent under LODs master");
-            writer.WriteLine("    lod_map = {");
-            writer.WriteLine("        '0.000': 'shadow_volume',");
-            writer.WriteLine("        '1.000': 'view_pilot',");
-            writer.WriteLine("        '2.000': 'geometry',");
-            writer.WriteLine("        '3.000': 'view_cargo',");
-            writer.WriteLine("        '4.000': 'view_commander',");
-            writer.WriteLine("        '5.000': 'view_gunner',");
-            writer.WriteLine("        '11.000': 'physx',");
-            writer.WriteLine("        '12.000': 'wreck',");
+            writer.WriteLine("    # A3OB v2.5 imports with groupby='TYPE', creating collections");
+            writer.WriteLine("    # by type group: \"Visuals\", \"Shadows\", \"Geometries\", etc.");
+            writer.WriteLine("    # Map type groups to standard LOD names and parent under LODs master.");
+            writer.WriteLine("    lod_type_names = {");
+            writer.WriteLine("        'Visuals': 'view',");
+            writer.WriteLine("        'Shadows': 'shadow_volume',");
+            writer.WriteLine("        'Geometries': 'geometry',");
+            writer.WriteLine("        'Point clouds': 'point_cloud',");
+            writer.WriteLine("        'PhysX': 'physx',");
+            writer.WriteLine("        'Wreck': 'wreck',");
+            writer.WriteLine("        'Misc': 'misc',");
             writer.WriteLine("    }");
-            writer.WriteLine("    for coll in list(bpy.data.collections):");
-            writer.WriteLine("        if coll.name in lod_map:");
-            writer.WriteLine("            coll.name = lod_map[coll.name]");
-            writer.WriteLine("    # Create or find master LODs collection");
             writer.WriteLine("    lods_master = bpy.data.collections.get('LODs')");
             writer.WriteLine("    if lods_master is None:");
             writer.WriteLine("        lods_master = bpy.data.collections.new('LODs')");
             writer.WriteLine("        bpy.context.scene.collection.children.link(lods_master)");
-            writer.WriteLine("    lod_names = set(lod_map.values())");
             writer.WriteLine("    for coll in list(bpy.data.collections):");
-            writer.WriteLine("        if coll.name in lod_names and coll.name != 'LODs':");
+            writer.WriteLine("        if coll.name in lod_type_names:");
+            writer.WriteLine("            coll.name = lod_type_names[coll.name]");
             writer.WriteLine("            for parent in list(coll.users_collection):");
             writer.WriteLine("                if parent.name != 'LODs':");
             writer.WriteLine("                    parent.children.unlink(coll)");

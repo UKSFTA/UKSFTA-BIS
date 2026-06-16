@@ -1,26 +1,27 @@
 <Project>
-  <Target Name="CustomILRepack" AfterTargets="Build" Condition="$(Configuration.Contains('Release'))">
+  <!-- Merge all dependency assemblies into the publish output for a standalone binary -->
+  <Target Name="CustomILRepackPublish" AfterTargets="Publish" Condition="$(Configuration.Contains('Release'))">
     <ItemGroup>
-      <InputAssemblies Include="$(OutputPath)$(TargetName)$(TargetExt)"/>
-      <InputAssemblies Include="$(OutputPath)*.dll" Exclude="$(OutputPath)$(TargetName)$(TargetExt);$(OutputPath)Spectre.Console.Ansi.dll"/>
+      <MergeInput Include="$(PublishDir)$(TargetName)$(TargetExt)"/>
+      <MergeInput Include="$(PublishDir)*.dll" Exclude="$(PublishDir)$(TargetName)$(TargetExt);$(PublishDir)Spectre.Console.Ansi.dll"/>
+      <CleanupDlls Include="$(PublishDir)*.dll" Exclude="$(PublishDir)$(TargetName)$(TargetExt);$(PublishDir)Spectre.Console.Ansi.dll"/>
+      <ResourceDirs Include="$([System.IO.Directory]::GetDirectories('$(PublishDir)', '*', System.IO.SearchOption.AllDirectories))"/>
     </ItemGroup>
     <ILRepack
       Parallel="true"
       DebugInfo="true"
       AllowDuplicateResources="false"
-      InputAssemblies="@(InputAssemblies)"
+      InputAssemblies="@(MergeInput)"
       TargetKind="SameAsPrimaryAssembly"
       KeyFile="$(KeyFile)"
-      OutputFile="$(OutputPath)$(TargetName)$(TargetExt)"
+      OutputFile="$(PublishDir)$(TargetName)$(TargetExt)"
     />
-  </Target>
-  <Target AfterTargets="CustomILRepack" Name="CustomCleanReferenceCopyLocalPaths"
-    Condition="$(Configuration.Contains('Release')) and '$(ClearOutputDirectory)' != 'False'">
-    <Delete Files="@(ReferenceCopyLocalPaths->'$(OutDir)%(DestinationSubDirectory)%(Filename)%(Extension)')" Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)', 'Spectre\.Console\.Ansi'))"/>
+    <!-- Remove merged DLLs, PDBs, and resource directories from publish output -->
     <ItemGroup>
-      <Directories Include="$([System.IO.Directory]::GetDirectories('$(OutDir)%(DestinationSubDirectory)', '*', System.IO.SearchOption.AllDirectories))"/>
-      <Directories><Files>$([System.IO.Directory]::GetFiles("%(Directories.Identity)", "*", System.IO.SearchOption.AllDirectories).get_Length())</Files></Directories>
+      <PublishPdbs Include="$([MSBuild]::EnsureTrailingSlash('$(PublishDir)'))*.pdb"/>
     </ItemGroup>
-    <RemoveDir Directories="@(Directories)" Condition="%(Files)=='0'"/>
+    <Delete Files="@(CleanupDlls)"/>
+    <Delete Files="@(PublishPdbs)"/>
+    <RemoveDir Directories="@(ResourceDirs)"/>
   </Target>
 </Project>

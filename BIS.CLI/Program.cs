@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using BIS.Core;
 using BIS.Core.Config;
 using BIS.P3D;
 using BIS.P3D.Conversion;
@@ -203,7 +204,7 @@ foreach (var cmd in root.Children.OfType<Command>())
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[red]Error: {ex.Message}[/]");
+                Terminal.ErrorCard("Error", ex.Message);
                 ctx.ExitCode = 1;
             }
         });
@@ -243,18 +244,19 @@ static string[] DiscoverFiles(string path, string pattern)
         return [path];
     if (Directory.Exists(path))
         return Directory.GetFiles(path, pattern, SearchOption.AllDirectories);
-    AnsiConsole.MarkupLine($"[red]Error: '{path}' is not a file or directory[/]");
+    Terminal.Error($"'{path}' is not a file or directory");
     return [];
 }
 
 static void PrintSummary(string label, int fileCount, int issueCount, long elapsedMs)
 {
-    var time = elapsedMs > 0 ? $" in {elapsedMs / 1000.0:F1}s" : "";
-    var prefix = issueCount > 0 ? "\n" : "";
+    var time = elapsedMs > 0 ? $"{elapsedMs / 1000.0:F1}s" : "";
+    var files = fileCount == 1 ? "file" : "files";
+    var issues = issueCount == 1 ? "issue" : "issues";
     if (issueCount == 0)
-        AnsiConsole.MarkupLine($"{prefix}[green]{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, no issues found{time}.[/]");
+        Terminal.SuccessCard($"{label} Lint OK", $"{fileCount} {files} linted, no issues found  ·  {time}");
     else
-        AnsiConsole.MarkupLine($"{prefix}[red]{fileCount} {label} file{(fileCount == 1 ? "" : "s")} linted, {issueCount} issue{(issueCount == 1 ? "" : "s")} found{time}.[/]");
+        Terminal.ErrorCard($"{label} Lint: {issueCount} {issues}", $"{fileCount} {files} linted, {issueCount} {issues} found  ·  {time}");
 }
 
 // ─── Batch handlers ───
@@ -340,49 +342,39 @@ static int LintConfigBatch(string path, bool json, bool exitCode, bool fix, stri
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Linting {files.Length} config files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Linting {files.Length} config files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
     if (json)
-        Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
-    else
     {
-        if (tableRows.Count > 0)
-        {
-            var table = new Table();
-            table.AddColumn("Code");
-            table.AddColumn("Severity");
-            table.AddColumn("Message");
-            table.AddColumn("File");
-            table.AddColumn("Location");
-            foreach (var (code, severity, color, message, file, location) in tableRows)
+        Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
+    }
+    else if (tableRows.Count > 0)
+    {
+        Terminal.Table(["Code", "Severity", "Message", "File", "Location"],
+            tableRows.Select(r => new[]
             {
-                table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
-            }
-            AnsiConsole.Write(table);
-        }
-        if (fixedCount > 0)
-            AnsiConsole.MarkupLine($"\n[green]{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.[/]");
+                r.Code,
+                $"[{r.Color}]{r.Severity}[/]",
+                Terminal.MarkupEncode(r.Message),
+                Terminal.MarkupEncode(r.File),
+                r.Location
+            }));
     }
 
+    if (fixedCount > 0)
+        Terminal.Success($"{fixedCount} file(s) auto-fixed.");
+
     var total = json ? allDiagnostics.Count : tableRows.Count;
-    if (files.Length == 1 && total == 0)
-        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("config", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -434,45 +426,37 @@ static int LintStringtableBatch(string path, bool json, bool exitCode)
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Linting {files.Length} stringtable files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Linting {files.Length} stringtable files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
     if (json)
+    {
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
+    }
     else if (tableRows.Count > 0)
     {
-        var table = new Table();
-        table.AddColumn("Code");
-        table.AddColumn("Severity");
-        table.AddColumn("Message");
-        table.AddColumn("File");
-        table.AddColumn("Location");
-        foreach (var (code, severity, color, message, file, location) in tableRows)
-        {
-            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
-        }
-        AnsiConsole.Write(table);
+        Terminal.Table(["Code", "Severity", "Message", "File", "Location"],
+            tableRows.Select(r => new[]
+            {
+                r.Code,
+                $"[{r.Color}]{r.Severity}[/]",
+                Terminal.MarkupEncode(r.Message),
+                Terminal.MarkupEncode(r.File),
+                r.Location
+            }));
     }
 
     var total = json ? allDiagnostics.Count : tableRows.Count;
-    if (files.Length == 1 && total == 0)
-        AnsiConsole.MarkupLine("[green]No issues found.[/]");
-    PrintSummary("SQF", files.Length, total, sw.ElapsedMilliseconds);
+    PrintSummary("stringtable", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
 
@@ -516,44 +500,36 @@ static int LintPreprocessorBatch(string path, bool json, bool exitCode)
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Preprocessing {files.Length} config files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Preprocessing {files.Length} config files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
     if (json)
+    {
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
+    }
     else if (tableRows.Count > 0)
     {
-        var table = new Table();
-        table.AddColumn("Code");
-        table.AddColumn("Severity");
-        table.AddColumn("Message");
-        table.AddColumn("File");
-        table.AddColumn("Location");
-        foreach (var (code, severity, color, message, file, location) in tableRows)
-        {
-            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
-        }
-        AnsiConsole.Write(table);
+        Terminal.Table(["Code", "Severity", "Message", "File", "Location"],
+            tableRows.Select(r => new[]
+            {
+                r.Code,
+                $"[{r.Color}]{r.Severity}[/]",
+                Terminal.MarkupEncode(r.Message),
+                Terminal.MarkupEncode(r.File),
+                r.Location
+            }));
     }
 
     var total = json ? allDiagnostics.Count : tableRows.Count;
-    if (files.Length == 1 && total == 0)
-        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("config", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -621,45 +597,37 @@ static int LintSqfBatch(string path, bool json, bool exitCode, bool fix = false)
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Linting {files.Length} SQF files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Linting {files.Length} SQF files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
     if (json)
-        Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
-    else
     {
-        if (tableRows.Count > 0)
-        {
-            var table = new Table();
-            table.AddColumn("Code");
-            table.AddColumn("Severity");
-            table.AddColumn("Message");
-            table.AddColumn("File");
-            table.AddColumn("Location");
-            foreach (var (code, severity, color, message, file, location) in tableRows)
-            {
-                table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
-            }
-            AnsiConsole.Write(table);
-        }
-        if (fixedCount > 0)
-            AnsiConsole.MarkupLine($"\n[green]{fixedCount} file{(fixedCount == 1 ? "" : "s")} auto-fixed.[/]");
+        Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
     }
+    else if (tableRows.Count > 0)
+    {
+        Terminal.Table(["Code", "Severity", "Message", "File", "Location"],
+            tableRows.Select(r => new[]
+            {
+                r.Code,
+                $"[{r.Color}]{r.Severity}[/]",
+                Terminal.MarkupEncode(r.Message),
+                Terminal.MarkupEncode(r.File),
+                r.Location
+            }));
+    }
+
+    if (fixedCount > 0)
+        Terminal.Success($"{fixedCount} file(s) auto-fixed.");
 
     var total = json ? allDiagnostics.Count : tableRows.Count;
     PrintSummary("SQF", files.Length, total, sw.ElapsedMilliseconds);
@@ -711,44 +679,36 @@ static int LintPboBatch(string path, bool json, bool exitCode)
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Linting {files.Length} PBO files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Linting {files.Length} PBO files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
     if (json)
+    {
         Console.WriteLine(JsonSerializer.Serialize(allDiagnostics, new JsonSerializerOptions { WriteIndented = true }));
+    }
     else if (tableRows.Count > 0)
     {
-        var table = new Table();
-        table.AddColumn("Code");
-        table.AddColumn("Severity");
-        table.AddColumn("Message");
-        table.AddColumn("File");
-        table.AddColumn("Location");
-        foreach (var (code, severity, color, message, file, location) in tableRows)
-        {
-            table.AddRow(code, $"[{color}]{severity}[/]", message, file, location);
-        }
-        AnsiConsole.Write(table);
+        Terminal.Table(["Code", "Severity", "Message", "File", "Location"],
+            tableRows.Select(r => new[]
+            {
+                r.Code,
+                $"[{r.Color}]{r.Severity}[/]",
+                Terminal.MarkupEncode(r.Message),
+                Terminal.MarkupEncode(r.File),
+                r.Location
+            }));
     }
 
     var total = json ? allDiagnostics.Count : tableRows.Count;
-    if (files.Length == 1 && total == 0)
-        AnsiConsole.MarkupLine("[green]No issues found.[/]");
     PrintSummary("PBO", files.Length, total, sw.ElapsedMilliseconds);
     return exitCode && total > 0 ? 1 : 0;
 }
@@ -758,18 +718,48 @@ static int LintPboBatch(string path, bool json, bool exitCode)
 static void HandleP3DValidate(string path)
 {
     var result = P3DValidator.Analyse(path);
-    AnsiConsole.MarkupLine($"Valid: [{(result.IsValid ? "green" : "red")}]{result.IsValid}[/]");
-    AnsiConsole.MarkupLine($"Format: [blue]{((result.IsMLOD ? "MLOD" : "ODOL"))}[/]");
-    AnsiConsole.MarkupLine($"Version: {result.Version}");
-    AnsiConsole.MarkupLine($"LODs: {result.LodCount}");
-    foreach (var issue in result.Issues)
-        AnsiConsole.MarkupLine($"  [[yellow]{issue.Severity}[/]] {issue.Code}: {issue.Message}");
-    AnsiConsole.MarkupLine($"Vertices: {result.TotalVertices}");
-    AnsiConsole.MarkupLine($"Faces: {result.TotalFaces}");
-    foreach (var lod in result.LODs)
+    var validColor = result.IsValid ? "green" : "red";
+
+    Terminal.Card("p3d validate", t =>
     {
-        AnsiConsole.MarkupLine($"  LOD {lod.Resolution:F1} ([blue]{lod.TypeName}[/]): {lod.VertexCount} verts, {lod.FaceCount} faces, {lod.TextureCount} textures");
-    }
+        t.AddRow(new Markup($"  [bold grey]Valid:[/] [{validColor}]{result.IsValid}[/]"));
+        var formatName = result.IsODOL ? "ODOL" : result.IsMLOD ? "MLOD" : "Unknown";
+        t.AddRow(new Markup($"  [bold grey]Format:[/]  {formatName} v{result.Version}"));
+        t.AddRow(new Markup($"  [bold grey]LODs:[/]    {result.LodCount}"));
+        t.AddRow(new Markup($"  [bold grey]Verts:[/]   {Terminal.FormatCount(result.TotalVertices)}"));
+        t.AddRow(new Markup($"  [bold grey]Faces:[/]   {Terminal.FormatCount(result.TotalFaces)}"));
+
+        if (result.Issues.Count > 0)
+        {
+            t.AddRow(new Markup(""));
+            Terminal.Section("Issues");
+            t.AddRow(new Markup(""));
+            foreach (var issue in result.Issues)
+                t.AddRow(new Markup($"  [yellow]{issue.Severity}:[/]  {issue.Code}  {Terminal.MarkupEncode(issue.Message)}"));
+        }
+
+        t.AddRow(new Markup(""));
+        Terminal.Section("LODs");
+        t.AddRow(new Markup(""));
+        var lodHeader = new Table().Border(TableBorder.None).HideHeaders()
+            .AddColumn("")
+            .AddColumn("Resolution")
+            .AddColumn("Type")
+            .AddColumn("Verts")
+            .AddColumn("Faces")
+            .AddColumn("Tex.");
+        foreach (var lod in result.LODs)
+        {
+            lodHeader.AddRow(
+                new Markup("  "),
+                new Markup($"{lod.Resolution:F3}"),
+                new Markup($"[deepskyblue2]{lod.TypeName}[/]"),
+                new Markup(Terminal.FormatCount(lod.VertexCount)),
+                new Markup(Terminal.FormatCount(lod.FaceCount)),
+                new Markup(lod.TextureCount.ToString()));
+        }
+        t.AddRow(lodHeader);
+    });
 }
 
 static void HandleP3DInfo(string path)
@@ -777,23 +767,44 @@ static void HandleP3DInfo(string path)
     using var stream = File.OpenRead(path);
     var p3d = new BIS.P3D.P3D(stream);
 
-    AnsiConsole.MarkupLine($"File: [blue]{Path.GetFileName(path)}[/]");
-    AnsiConsole.MarkupLine($"Format: [blue]{(p3d.IsODOLFormat ? "ODOL" : p3d.IsMLODFormat ? "MLOD" : "Unknown")}[/]");
-    AnsiConsole.MarkupLine($"Version: {p3d.Version}");
+    var format = p3d.IsODOLFormat ? "ODOL" : p3d.IsMLODFormat ? "MLOD" : "Unknown";
 
-    if (p3d.ModelInfo != null)
+    Terminal.Card("p3d info", t =>
     {
-        AnsiConsole.MarkupLine($"Class: {p3d.ModelInfo.Class}");
-        AnsiConsole.MarkupLine($"Map: {p3d.ModelInfo.MapType}");
-    }
+        t.AddRow(new Markup($"  [bold grey]File:[/]     {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Format:[/]   [deepskyblue2]{format}[/]"));
+        t.AddRow(new Markup($"  [bold grey]Version:[/]  {p3d.Version}"));
 
-    foreach (var lod in p3d.LODs)
-    {
-        AnsiConsole.MarkupLine($"  LOD {lod.Resolution:F1}: {lod.VertexCount} verts, {lod.FaceCount} faces");
-        var texs = lod.GetTextures()?.ToArray() ?? [];
-        if (texs.Length > 0)
-            AnsiConsole.MarkupLine($"    Textures: {string.Join(", ", texs.Take(5))}{(texs.Length > 5 ? $" +{texs.Length - 5} more" : "")}");
-    }
+        if (p3d.ModelInfo != null)
+        {
+            t.AddRow(new Markup($"  [bold grey]Class:[/]    {Terminal.MarkupEncode(p3d.ModelInfo.Class?.ToString() ?? "—")}"));
+            t.AddRow(new Markup($"  [bold grey]Map:[/]      {Terminal.MarkupEncode(p3d.ModelInfo.MapType.ToString())}"));
+        }
+
+        t.AddRow(new Markup(""));
+        Terminal.Section($"LODs ({p3d.LODs.Count()})");
+        t.AddRow(new Markup(""));
+        var lodTable = new Table().Border(TableBorder.None).HideHeaders()
+            .AddColumn("")
+            .AddColumn("Resolution")
+            .AddColumn("Verts")
+            .AddColumn("Faces")
+            .AddColumn("Textures");
+        foreach (var lod in p3d.LODs)
+        {
+            var texs = lod.GetTextures()?.ToArray() ?? [];
+            var texStr = texs.Length > 0
+                ? string.Join(", ", texs.Take(3)) + (texs.Length > 3 ? $" [dim]+{texs.Length - 3} more[/]" : "")
+                : "[dim](none)[/]";
+            lodTable.AddRow(
+                new Markup("  "),
+                new Markup($"{lod.Resolution:F3}"),
+                new Markup(Terminal.FormatCount((int)lod.VertexCount)),
+                new Markup(Terminal.FormatCount(lod.FaceCount)),
+                new Markup(texStr));
+        }
+        t.AddRow(lodTable);
+    });
 }
 
 static void HandleP3DConvert(string path, FileInfo? output)
@@ -802,24 +813,29 @@ static void HandleP3DConvert(string path, FileInfo? output)
     var p3d = new BIS.P3D.P3D(stream);
     var outPath = output?.FullName ?? Path.ChangeExtension(path, p3d.IsODOLFormat ? ".mlod" : ".odol");
 
-    if (p3d.ODOL != null)
+    Terminal.Card("p3d convert", t =>
     {
-        var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
-        mlod.WriteToFile(outPath, true);
-        AnsiConsole.MarkupLine($"ODOL->MLOD: [green]{outPath}[/] ({mlod.Lods.Length} LODs)");
-    }
-    else if (p3d.MLOD != null)
-    {
-        var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(p3d.MLOD);
-        using var outStream = File.Create(outPath);
-        var writer = new BIS.Core.Streams.BinaryWriterEx(outStream);
-        odol.Write(writer);
-        AnsiConsole.MarkupLine($"MLOD->ODOL: [green]{outPath}[/] ({odol.Lods.Length} LODs)");
-    }
-    else
-    {
-        AnsiConsole.MarkupLine("[red]Unknown P3D format — cannot convert[/]");
-    }
+        if (p3d.ODOL != null)
+        {
+            var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
+            mlod.WriteToFile(outPath, true);
+            t.AddRow(new Markup($"  ODOL → MLOD:  [green]{Terminal.MarkupEncode(outPath)}[/]"));
+            t.AddRow(new Markup($"  LODs:         {mlod.Lods.Length}"));
+        }
+        else if (p3d.MLOD != null)
+        {
+            var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(p3d.MLOD);
+            using var outStream = File.Create(outPath);
+            var writer = new BIS.Core.Streams.BinaryWriterEx(outStream);
+            odol.Write(writer);
+            t.AddRow(new Markup($"  MLOD → ODOL:  [green]{Terminal.MarkupEncode(outPath)}[/]"));
+            t.AddRow(new Markup($"  LODs:         {odol.Lods.Length}"));
+        }
+        else
+        {
+            t.AddRow(new Markup($"  [red]Unknown P3D format — cannot convert[/]"));
+        }
+    });
 }
 
 static void HandleP3DRoundtrip(string path)
@@ -827,198 +843,271 @@ static void HandleP3DRoundtrip(string path)
     using var stream = File.OpenRead(path);
     var p3d = new BIS.P3D.P3D(stream);
 
-    if (p3d.ODOL != null)
+    Terminal.Card("p3d roundtrip", t =>
     {
-        AnsiConsole.Markup("ODOL -> MLOD -> ODOL: ");
-        var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
-        var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(mlod);
-        bool ok = odol.Lods.Length == p3d.ODOL.Lods.Length;
-        if (ok)
+        if (p3d.ODOL != null)
         {
+            var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(p3d.ODOL);
+            var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(mlod);
+            bool ok = odol.Lods.Length == p3d.ODOL.Lods.Length;
+            if (ok)
+            {
+                foreach (var origLod in p3d.ODOL.Lods)
+                {
+                    var roundtripLod = odol.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
+                    if (roundtripLod == null || roundtripLod.Vertices.Count != origLod.Vertices.Count)
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+            }
+            var resultColor = ok ? "green" : "red";
+            var resultText = ok ? "OK" : "MISMATCH";
+            t.AddRow(new Markup($"  ODOL → MLOD → ODOL:  [{resultColor}]{resultText}[/]"));
+            t.AddRow(new Markup($"  LODs:  {p3d.ODOL.Lods.Length} → {odol.Lods.Length}"));
+
+            var lodsTable = new Table().Border(TableBorder.None).HideHeaders()
+                .AddColumn("")
+                .AddColumn("Resolution")
+                .AddColumn("Verts (orig)")
+                .AddColumn("Verts (rt)");
             foreach (var origLod in p3d.ODOL.Lods)
             {
                 var roundtripLod = odol.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
-                if (roundtripLod == null || roundtripLod.Vertices.Count != origLod.Vertices.Count)
+                if (roundtripLod != null)
+                    lodsTable.AddRow(new Markup("  "), new Markup($"{origLod.Resolution:F3}"),
+                        new Markup(Terminal.FormatCount(origLod.Vertices.Count)),
+                        new Markup(Terminal.FormatCount(roundtripLod.Vertices.Count)));
+            }
+            t.AddRow(new Markup(""));
+            t.AddRow(lodsTable);
+        }
+        else if (p3d.MLOD != null)
+        {
+            var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(p3d.MLOD);
+            var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(odol);
+            bool ok = mlod.Lods.Length == p3d.MLOD.Lods.Length;
+            if (ok)
+            {
+                foreach (var origLod in p3d.MLOD.Lods)
                 {
-                    ok = false;
-                    break;
+                    var roundtripLod = mlod.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
+                    if (roundtripLod == null || roundtripLod.Points.Length != origLod.Points.Length)
+                    {
+                        ok = false;
+                        break;
+                    }
                 }
             }
-        }
-        AnsiConsole.MarkupLine(ok ? "[green]OK[/]" : "[red]MISMATCH[/]");
-        AnsiConsole.MarkupLine($"  LODs: {p3d.ODOL.Lods.Length} -> {odol.Lods.Length}");
-        foreach (var origLod in p3d.ODOL.Lods)
-        {
-            var roundtripLod = odol.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
-            if (roundtripLod != null)
-                AnsiConsole.MarkupLine($"  LOD {origLod.Resolution:F1}: {origLod.Vertices.Count} verts -> {roundtripLod.Vertices.Count} verts");
-        }
-    }
-    else if (p3d.MLOD != null)
-    {
-        AnsiConsole.Markup("MLOD -> ODOL -> MLOD: ");
-        var odol = BIS.P3D.Conversion.MLOD2ODOL.Convert(p3d.MLOD);
-        var mlod = BIS.P3D.Conversion.ODOL2MLOD.Convert(odol);
-        bool ok = mlod.Lods.Length == p3d.MLOD.Lods.Length;
-        if (ok)
-        {
+            var resultColor = ok ? "green" : "red";
+            var resultText = ok ? "OK" : "MISMATCH";
+            t.AddRow(new Markup($"  MLOD → ODOL → MLOD:  [{resultColor}]{resultText}[/]"));
+            t.AddRow(new Markup($"  LODs:  {p3d.MLOD.Lods.Length} → {mlod.Lods.Length}"));
+
+            var lodsTable = new Table().Border(TableBorder.None).HideHeaders()
+                .AddColumn("")
+                .AddColumn("Resolution")
+                .AddColumn("Points (orig)")
+                .AddColumn("Points (rt)");
             foreach (var origLod in p3d.MLOD.Lods)
             {
                 var roundtripLod = mlod.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
-                if (roundtripLod == null || roundtripLod.Points.Length != origLod.Points.Length)
-                {
-                    ok = false;
-                    break;
-                }
+                if (roundtripLod != null)
+                    lodsTable.AddRow(new Markup("  "), new Markup($"{origLod.Resolution:F3}"),
+                        new Markup(Terminal.FormatCount(origLod.Points.Length)),
+                        new Markup(Terminal.FormatCount(roundtripLod.Points.Length)));
             }
+            t.AddRow(new Markup(""));
+            t.AddRow(lodsTable);
         }
-        AnsiConsole.MarkupLine(ok ? "[green]OK[/]" : "[red]MISMATCH[/]");
-        AnsiConsole.MarkupLine($"  LODs: {p3d.MLOD.Lods.Length} -> {mlod.Lods.Length}");
-        foreach (var origLod in p3d.MLOD.Lods)
-        {
-            var roundtripLod = mlod.Lods.FirstOrDefault(l => l.Resolution == origLod.Resolution);
-            if (roundtripLod != null)
-                AnsiConsole.MarkupLine($"  LOD {origLod.Resolution:F1}: {origLod.Points.Length} points -> {roundtripLod.Points.Length} points");
-        }
-    }
+    });
 }
 
 static void HandleP3DExport(string path, DirectoryInfo? outputDir, FileInfo? modelCfg = null)
 {
-    if (Directory.Exists(path))
+    Terminal.Card("p3d export", t =>
     {
-        string outDir = outputDir?.FullName ?? Path.Combine(path, "_blender");
-        string? modelCfgPath = modelCfg?.FullName;
-        if (modelCfgPath != null)
-            AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
-        AnsiConsole.MarkupLine($"[blue]Batch-exporting all .p3d files in {path}...[/]");
-        var task = BlenderHelper.ExportAsync(path, outDir);
-        int count = task.GetAwaiter().GetResult();
-        if (count > 0)
-            AnsiConsole.MarkupLine($"[green]Blender batch export complete in {outDir}[/]");
+        if (Directory.Exists(path))
+        {
+            string outDir = outputDir?.FullName ?? Path.Combine(path, "_blender");
+            string? modelCfgPath = modelCfg?.FullName;
+            if (modelCfgPath != null)
+                t.AddRow(new Markup($"  [grey]model.cfg:[/]  {Terminal.MarkupEncode(modelCfgPath)}"));
+            t.AddRow(new Markup($"  [bold grey]Source:[/]   {Terminal.MarkupEncode(path)}"));
+            t.AddRow(new Markup($"  [bold grey]Output:[/]   {Terminal.MarkupEncode(outDir)}"));
+            Terminal.Section("Exporting to Blender...");
+            var task = BlenderHelper.ExportAsync(path, outDir);
+            int count = task.GetAwaiter().GetResult();
+            if (count > 0)
+                t.AddRow(new Markup($"  [green]Blender batch export complete[/]  ({Terminal.FormatCount(count)} batch(es))"));
+            else
+                t.AddRow(new Markup($"  [red]Blender batch export failed[/]"));
+        }
+        else if (File.Exists(path))
+        {
+            string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
+            string? modelCfgPath = modelCfg?.FullName;
+            if (modelCfgPath != null)
+                t.AddRow(new Markup($"  [grey]model.cfg:[/]  {Terminal.MarkupEncode(modelCfgPath)}"));
+            t.AddRow(new Markup($"  [bold grey]File:[/]     {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+            t.AddRow(new Markup($"  [bold grey]Output:[/]   {Terminal.MarkupEncode(outDir)}"));
+            Terminal.Section("Exporting to Blender...");
+            var task = BlenderHelper.ExportSingleAsync(path, outDir, modelCfgPath);
+            bool ok = task.GetAwaiter().GetResult();
+            if (ok)
+                t.AddRow(new Markup($"  [green]Blender export complete[/]"));
+            else
+                t.AddRow(new Markup($"  [red]Blender export failed[/]"));
+        }
         else
-            AnsiConsole.MarkupLine($"[red]Blender batch export failed[/]");
-    }
-    else if (File.Exists(path))
-    {
-        string outDir = outputDir?.FullName ?? Path.Combine(Path.GetDirectoryName(path) ?? ".", "_blender");
-        string? modelCfgPath = modelCfg?.FullName;
-        if (modelCfgPath != null)
-            AnsiConsole.MarkupLine($"[blue]  Using model.cfg: {modelCfgPath}[/]");
-        AnsiConsole.MarkupLine($"[blue]Exporting {Path.GetFileName(path)} to Blender...[/]");
-        var task = BlenderHelper.ExportSingleAsync(path, outDir, modelCfgPath);
-        bool ok = task.GetAwaiter().GetResult();
-        if (ok)
-            AnsiConsole.MarkupLine($"[green]Blender export complete in {outDir}[/]");
-        else
-            AnsiConsole.MarkupLine($"[red]Blender export failed[/]");
-    }
-    else
-    {
-        AnsiConsole.MarkupLine($"[red]Error: '{path}' is not a file or directory[/]");
-    }
+        {
+            t.AddRow(new Markup($"  [red]'{Terminal.MarkupEncode(path)}' is not a file or directory[/]"));
+        }
+    });
 }
 
 static void HandleP3DRetexture(string path, FileInfo remapFile, FileInfo? output, DirectoryInfo? textureDir = null, string? lodFilter = null)
 {
     string outputPath = output?.FullName ?? path;
-    string? texDir = textureDir?.FullName;
-    AnsiConsole.MarkupLine($"[blue]Re-texturing {Path.GetFileName(path)}...[/]");
-    if (lodFilter != null)
-        AnsiConsole.MarkupLine($"  LOD filter: [blue]{lodFilter}[/]");
 
-    string scriptPath = RetextureExport.GenerateRetextureScript(path, remapFile.FullName, outputPath, texDir, lodFilter);
-    AnsiConsole.MarkupLine($"  Generated script: [blue]{Path.GetFileName(scriptPath)}[/]");
+    Terminal.Card("p3d re-texture", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]Model:[/]    {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Remap:[/]    {Terminal.MarkupEncode(remapFile.FullName)}"));
+        t.AddRow(new Markup($"  [bold grey]Output:[/]   {Terminal.MarkupEncode(outputPath)}"));
+        if (lodFilter != null)
+            t.AddRow(new Markup($"  [bold grey]LODs:[/]     [deepskyblue2]{Terminal.MarkupEncode(lodFilter)}[/]"));
 
-    string workingDir = Path.GetDirectoryName(outputPath) ?? ".";
-    var blenderHelperTask = BlenderHelper.RunScriptAsync(scriptPath, workingDir);
-    bool ok = blenderHelperTask.GetAwaiter().GetResult();
-    if (ok)
-        AnsiConsole.MarkupLine($"[green]Re-texturing complete: {outputPath}[/]");
-    else
-        AnsiConsole.MarkupLine($"[red]Re-texturing failed[/]");
+        Terminal.Section("Generating Blender script...");
+        string scriptPath = RetextureExport.GenerateRetextureScript(path, remapFile.FullName, outputPath, textureDir?.FullName, lodFilter);
+        t.AddRow(new Markup($"  Script:  {Terminal.MarkupEncode(Path.GetFileName(scriptPath))}"));
+
+        string workingDir = Path.GetDirectoryName(outputPath) ?? ".";
+        var blenderHelperTask = BlenderHelper.RunScriptAsync(scriptPath, workingDir);
+        bool ok = blenderHelperTask.GetAwaiter().GetResult();
+        if (ok)
+            t.AddRow(new Markup($"  [green]Re-texturing complete[/]"));
+        else
+            t.AddRow(new Markup($"  [red]Re-texturing failed[/]"));
+    });
 }
 
 static void HandlePAAAnalyze(string path)
 {
     var analysis = BIS.PAA.PaaAnalyzer.Analyze(path);
-    AnsiConsole.MarkupLine($"Format: [blue]{analysis.Format}[/]");
-    AnsiConsole.MarkupLine($"Size: {analysis.Width}x{analysis.Height}");
-    AnsiConsole.MarkupLine($"MIP maps: {analysis.MipmapCount}");
-    AnsiConsole.MarkupLine($"Alpha: {(analysis.HasAlpha ? "[green]yes[/]" : "[grey]no[/]")}");
-    AnsiConsole.MarkupLine($"Transparency: {(analysis.IsTransparent ? "[green]yes[/]" : "[grey]no[/]")}");
-    AnsiConsole.MarkupLine($"Category: {analysis.CategoryLabel}");
+
+    Terminal.Card("paa analyze", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]Format:[/]    [deepskyblue2]{analysis.Format}[/]"));
+        t.AddRow(new Markup($"  [bold grey]Size:[/]      {analysis.Width} × {analysis.Height}"));
+        t.AddRow(new Markup($"  [bold grey]MIP maps:[/]  {analysis.MipmapCount}"));
+        t.AddRow(new Markup($"  [bold grey]Alpha:[/]     {(analysis.HasAlpha ? "[green]yes[/]" : "[grey]no[/]")}"));
+        t.AddRow(new Markup($"  [bold grey]Transparency:[/]  {(analysis.IsTransparent ? "[green]yes[/]" : "[grey]no[/]")}"));
+        t.AddRow(new Markup($"  [bold grey]Category:[/]  {Terminal.MarkupEncode(analysis.CategoryLabel)}"));
+    });
 }
 
 static void HandlePAASuggest(string path)
 {
     var analysis = BIS.PAA.PaaAnalyzer.Analyze(path);
     var suggestion = BIS.PAA.PaaAnalyzer.SuggestOptimalFormat(analysis);
-    AnsiConsole.MarkupLine($"Current: {analysis.Format}");
-    AnsiConsole.MarkupLine($"Optimal: [green]{suggestion.RecommendedFormat}[/]");
-    AnsiConsole.MarkupLine($"Rationale: {suggestion.Rationale}");
-    AnsiConsole.MarkupLine($"Size factor: {suggestion.EstimatedSizeFactor:F3}x");
-    if (!string.IsNullOrEmpty(suggestion.Notes))
-        AnsiConsole.MarkupLine($"Notes: {suggestion.Notes}");
+
+    Terminal.Card("paa suggest", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]Current:[/]  {analysis.Format}"));
+        t.AddRow(new Markup($"  [bold grey]Optimal:[/] [green]{suggestion.RecommendedFormat}[/]"));
+        t.AddRow(new Markup($"  [bold grey]Ratio:[/]    {suggestion.Rationale}"));
+        t.AddRow(new Markup($"  [bold grey]Size:[/]     {suggestion.EstimatedSizeFactor:F3}× smaller"));
+        if (!string.IsNullOrEmpty(suggestion.Notes))
+        {
+            t.AddRow(new Markup(""));
+            t.AddRow(new Markup($"  [grey]{Terminal.MarkupEncode(suggestion.Notes)}[/]"));
+        }
+    });
 }
 
 static void HandlePBOList(string path, bool raw)
 {
     var pbo = new BIS.PBO.PBO(path);
-    AnsiConsole.MarkupLine($"File: [blue]{Path.GetFileName(path)}[/]");
-    AnsiConsole.MarkupLine($"Entries: {pbo.Files.Count}");
 
-    if (raw)
+    Terminal.Card("pbo list", t =>
     {
-        long totalSize = 0;
-        foreach (var entry in pbo.Files)
+        t.AddRow(new Markup($"  [bold grey]File:[/]     {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Entries:[/]  {pbo.Files.Count}"));
+
+        if (raw)
         {
-            int size = entry.Size;
-            totalSize += size;
-            string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
-            AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
+            long totalSize = 0;
+            Terminal.Section("Contents (raw)");
+            foreach (var entry in pbo.Files)
+            {
+                totalSize += entry.Size;
+                var packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
+                t.AddRow(new Table().Border(TableBorder.None).HideHeaders()
+                    .AddColumn("")
+                    .AddColumn("Name")
+                    .AddColumn("Size")
+                    .AddRow(new Markup("  "),
+                        new Markup(Terminal.MarkupEncode(entry.FileName)),
+                        new Markup($"[dim]{Terminal.FormatBytes(entry.Size),10}[/]{packInfo}")));
+            }
+            t.AddRow(new Markup(""));
+            t.AddRow(new Markup($"  [bold]Total:[/]  {Terminal.FormatBytes(totalSize)}"));
+            return;
         }
-        AnsiConsole.MarkupLine($"Total: {totalSize} bytes");
-        return;
-    }
 
-    var deobfuscator = new PboDeobfuscator();
-    var result = deobfuscator.Process(pbo);
+        var deobfuscator = new PboDeobfuscator();
+        var result = deobfuscator.Process(pbo);
 
-    if (result.IsObfuscated)
-        AnsiConsole.MarkupLine($"[yellow]Deobfuscation:[/] {result.MatchedProfile}");
-    if (result.FilteredOut.Count > 0)
-        AnsiConsole.MarkupLine($"[grey]Decoy/stub entries hidden:[/] {result.FilteredOut.Count}");
+        var meta = new List<string>();
+        if (result.IsObfuscated)
+            meta.Add($"[yellow]deobfuscated ({result.MatchedProfile})[/]");
+        if (result.FilteredOut.Count > 0)
+            meta.Add($"[grey]{result.FilteredOut.Count} decoy hidden[/]");
+        if (meta.Count > 0)
+            t.AddRow(new Markup($"  [bold grey]Meta:[/]     {string.Join(", ", meta)}"));
 
-    long totalSizeDeob = 0;
-    for (int i = 0; i < pbo.Files.Count; i++)
-    {
-        if (result.FilteredOut.Contains(i))
-            continue;
+        Terminal.Section("Contents");
 
-        var entry = pbo.Files[i];
-        int size = entry.Size;
-        totalSizeDeob += size;
-
-        bool recovered = result.RecoveredNames.TryGetValue(i, out var recoveredName);
-        string packInfo = entry.IsCompressed ? " [yellow](packed)[/]" : "";
-        string recoveryTag = recovered ? " [green]✔[/]" : "";
-
-        if (recovered)
+        long totalSizeDeob = 0;
+        var fileTable = new Table().Border(TableBorder.None).HideHeaders()
+            .AddColumn("")
+            .AddColumn("Name")
+            .AddColumn("Size");
+        for (int i = 0; i < pbo.Files.Count; i++)
         {
-            var originalName = entry.FileName;
-            AnsiConsole.MarkupLine($"  {recoveredName,-40} {size,8} bytes{packInfo}{recoveryTag}");
-            if (originalName != recoveredName)
-                AnsiConsole.MarkupLine($"    [grey](was: {originalName})[/]");
+            if (result.FilteredOut.Contains(i))
+                continue;
+
+            var entry = pbo.Files[i];
+            totalSizeDeob += entry.Size;
+
+            bool recovered = result.RecoveredNames.TryGetValue(i, out var recoveredName);
+            var packInfo = entry.IsCompressed ? "  [yellow]packed[/]" : "";
+
+            if (recovered)
+            {
+                var originalName = entry.FileName;
+                fileTable.AddRow(new Markup("  "),
+                    new Markup($"{Terminal.MarkupEncode(recoveredName)} [green]✔[/]"),
+                    new Markup($"[dim]{Terminal.FormatBytes(entry.Size),10}[/]{packInfo}"));
+                if (originalName != recoveredName)
+                    fileTable.AddRow(new Markup("    "),
+                        new Markup($"[dim](was: {Terminal.MarkupEncode(originalName)})[/]"),
+                        new Markup(""));
+            }
+            else
+            {
+                fileTable.AddRow(new Markup("  "),
+                    new Markup(Terminal.MarkupEncode(entry.FileName)),
+                    new Markup($"[dim]{Terminal.FormatBytes(entry.Size),10}[/]{packInfo}"));
+            }
         }
-        else
-        {
-            AnsiConsole.MarkupLine($"  {entry.FileName,-40} {size,8} bytes{packInfo}");
-        }
-    }
-    AnsiConsole.MarkupLine($"Total: {totalSizeDeob} bytes");
-    if (result.FilteredOut.Count > 0)
-        AnsiConsole.MarkupLine($"[grey]({result.FilteredOut.Count} decoy/stub entries skipped)[/]");
+        t.AddRow(fileTable);
+        t.AddRow(new Markup(""));
+        t.AddRow(new Markup($"  [bold]Total:[/]  {Terminal.FormatBytes(totalSizeDeob)}"));
+    });
 }
 
 static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bool matchTextures, bool exportBlender, bool fuzzyMatch, FileInfo? retxFile = null, FileInfo? modelCfg = null)
@@ -1026,16 +1115,24 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
     var outDir = outputDir?.FullName ?? Path.GetFileNameWithoutExtension(path);
     var pbo = new BIS.PBO.PBO(path);
 
+    Terminal.Card("pbo extract", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]File:[/]    {Terminal.MarkupEncode(Path.GetFileName(path))}"));
+        t.AddRow(new Markup($"  [bold grey]Output:[/]  {Terminal.MarkupEncode(outDir)}"));
+    });
+
     if (raw)
     {
         Directory.CreateDirectory(outDir);
         pbo.ExtractFiles(pbo.Files, outDir);
-        AnsiConsole.MarkupLine($"[green]Extracted {pbo.Files.Count} files to {outDir}[/]");
+        Terminal.Success($"Extracted {pbo.Files.Count} files to {outDir}");
         return;
     }
 
     var deobfuscator = new PboDeobfuscator();
     var result = deobfuscator.Process(pbo);
+
+    Terminal.Section("Texture matching");
 
     // Apply pixel-content orphan matching BEFORE extraction so matched
     // names flow into the pathMap and reference updaters.
@@ -1044,13 +1141,13 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
         var applied = PaaContentMatcher.ApplyMatches(pbo, result);
         if (applied.Count > 0)
         {
-            AnsiConsole.MarkupLine($"  [green]Pixel-content matching: {applied.Count} orphan texture(s) auto-renamed[/]");
+            Terminal.Success($"Pixel-content matching: {applied.Count} orphan texture(s) auto-renamed");
             ShowAppliedTextureMatches(pbo, applied);
         }
         else
         {
             int orphanCount = CountOrphanPaas(pbo, result);
-            AnsiConsole.MarkupLine($"  [yellow]No pixel-content matches for {orphanCount} orphan texture(s).[/]");
+            Terminal.Warning($"No pixel-content matches for {orphanCount} orphan texture(s).");
         }
     }
 
@@ -1061,13 +1158,13 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
         var fuzzyApplied = PaaContentMatcher.ApplyFuzzyMatches(pbo, result);
         if (fuzzyApplied.Count > 0)
         {
-            AnsiConsole.MarkupLine($"  [green]Fuzzy texture matching: {fuzzyApplied.Count} orphan texture(s) auto-renamed[/]");
+            Terminal.Success($"Fuzzy texture matching: {fuzzyApplied.Count} orphan texture(s) auto-renamed");
             ShowAppliedTextureMatches(pbo, fuzzyApplied);
         }
         else
         {
             int orphanCount = CountOrphanPaas(pbo, result);
-            AnsiConsole.MarkupLine($"  [yellow]No fuzzy matches for {orphanCount} remaining orphan texture(s).[/]");
+            Terminal.Warning($"No fuzzy matches for {orphanCount} remaining orphan texture(s).");
         }
     }
 
@@ -1075,32 +1172,34 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
     // texture names are available for reference inference.
     var rvmatApplied = RvmatContentMatcher.ApplyMatches(pbo, result);
     if (rvmatApplied.Count > 0)
-        AnsiConsole.MarkupLine($"  [green]RVMAT content matching: {rvmatApplied.Count} orphan material(s) auto-renamed[/]");
+        Terminal.Success($"RVMAT content matching: {rvmatApplied.Count} orphan material(s) auto-renamed");
 
     int extracted = DeobfuscatedExtract(pbo, result, outDir, out var pathMap);
-    AnsiConsole.MarkupLine($"[green]Extracted {extracted} files to {outDir} (deobfuscated)[/]");
+    Terminal.SuccessCard("PBO Extract", $"Extracted {extracted} files to {outDir} (deobfuscated)");
 
     // ─── Blender export (PAA→PNG pre-conversion, then batch import via Blender) ───
     if (exportBlender)
     {
+        Terminal.Section("Blender export");
         string blenderDir = Path.Combine(outDir, "_blender");
         var blenderTask = BlenderHelper.ExportAsync(outDir, blenderDir, modelCfg?.FullName);
         int blenderResult = blenderTask.GetAwaiter().GetResult();
-        AnsiConsole.MarkupLine($"[green]Blender export complete in {blenderDir}[/]");
+        Terminal.Success($"Blender export complete: {Terminal.MarkupEncode(blenderDir)}");
     }
 
     if (retxFile != null)
     {
+        Terminal.Section("Re-texture");
         string retxDir = Path.Combine(outDir, "_retx");
         Directory.CreateDirectory(retxDir);
         var p3dModels = Directory.GetFiles(outDir, "*.p3d", SearchOption.AllDirectories);
         if (p3dModels.Length == 0)
         {
-            AnsiConsole.MarkupLine($"[yellow]No .p3d files found in {outDir}[/]");
+            Terminal.Warning($"No .p3d files found in {outDir}");
         }
         else
         {
-            AnsiConsole.MarkupLine($"[blue]Batch re-texturing {p3dModels.Length} .p3d model(s)...[/]");
+            Terminal.Info($"Batch re-texturing {p3dModels.Length} .p3d model(s)...");
 
             var modelPairs = new List<(string ModelPath, string OutputPath)>();
             foreach (var modelPath in p3dModels)
@@ -1117,17 +1216,13 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
                     modelPairs, retxFile.FullName);
                 bool ok = BlenderHelper.RunScriptAsync(scriptPath, retxDir).GetAwaiter().GetResult();
                 if (ok)
-                {
-                    AnsiConsole.MarkupLine($"[green]Batch re-texture complete: {modelPairs.Count}/{modelPairs.Count} succeeded[/]");
-                }
+                    Terminal.Success($"Batch re-texture complete: {modelPairs.Count}/{modelPairs.Count} succeeded");
                 else
-                {
-                    AnsiConsole.MarkupLine($"[red]Batch re-texture failed (some models may have failed)[/]");
-                }
+                    Terminal.Error("Batch re-texture failed (some models may have failed)");
             }
             catch (Exception ex)
             {
-                AnsiConsole.MarkupLine($"[red]Batch re-texture error: {ex.Message}[/]");
+                Terminal.Error($"Batch re-texture error: {ex.Message}");
             }
         }
     }
@@ -1141,7 +1236,7 @@ static void HandlePBOExtract(string path, DirectoryInfo? outputDir, bool raw, bo
 static int DeobfuscatedExtract(BIS.PBO.PBO pbo, DeobfuscationResult result, string outDir, out Dictionary<string, string> pathMap)
 {
     if (result.IsObfuscated)
-        AnsiConsole.MarkupLine($"  [yellow]Detected: {result.MatchedProfile}[/]");
+        Terminal.Warning($"Detected: {result.MatchedProfile}");
 
     // Build path map: RawFileName (preserved obfuscated path) → output name
     // Recovered entries get their recovered names; non-recovered entries get
@@ -1257,7 +1352,7 @@ static int DeobfuscatedExtract(BIS.PBO.PBO pbo, DeobfuscationResult result, stri
     }
 
     if (result.FilteredOut.Count > 0)
-        AnsiConsole.MarkupLine($"  [grey]({result.FilteredOut.Count} decoy/stub entries skipped)[/]");
+        Terminal.Muted($"({result.FilteredOut.Count} decoy/stub entries skipped)");
 
     return extracted;
 }
@@ -1277,19 +1372,12 @@ static int CountOrphanPaas(BIS.PBO.PBO pbo, DeobfuscationResult result)
 
 static void ShowAppliedTextureMatches(BIS.PBO.PBO pbo, Dictionary<int, string> applied)
 {
-    var table = new Table();
-    table.AddColumn("Orphan");
-    table.AddColumn("Auto-Renamed To");
-
-    foreach (var kvp in applied)
-    {
-        var orphanName = pbo.Files[kvp.Key].FileName;
-        table.AddRow(
-            $"[grey]{orphanName}[/]",
-            $"[green]{kvp.Value}[/]");
-    }
-
-    AnsiConsole.Write(table);
+    Terminal.Table(["Orphan", "Auto-Renamed To"],
+        applied.Select(kvp => new[]
+        {
+            $"[grey]{Terminal.MarkupEncode(pbo.Files[kvp.Key].FileName)}[/]",
+            $"[green]{Terminal.MarkupEncode(kvp.Value)}[/]"
+        }));
 }
 
 static string DerapifyConfig(byte[] configBinData)
@@ -1368,29 +1456,36 @@ static void HandlePBOPack(string sourceDir, FileInfo? output, string? prefix, bo
 
     pbo.SaveTo(outPath, compress);
 
-    var compressInfo = compress ? " (compressed)" : "";
-    AnsiConsole.MarkupLine($"[green]Packed {files.Length} files{compressInfo} -> {outPath}[/]  (prefix: [blue]{prefixVal}[/])");
+    Terminal.Card("pbo pack", t =>
+    {
+        var compressInfo = compress ? " (compressed)" : "";
+        t.AddRow(new Markup($"  [bold grey]Files:[/]    {files.Length}{compressInfo}"));
+        t.AddRow(new Markup($"  [bold grey]Prefix:[/]   [deepskyblue2]{Terminal.MarkupEncode(prefixVal)}[/]"));
+        t.AddRow(new Markup($"  [bold grey]Output:[/]   [green]{Terminal.MarkupEncode(outPath)}[/]"));
 
-    // Validate the generated PBO
-    try
-    {
-        var linter = new PboLinter();
-        var linterDiags = linter.Lint(pbo);
-        if (linterDiags.Count > 0)
+        // Validate the generated PBO
+        try
         {
-            AnsiConsole.MarkupLine("[yellow]Issues:[/]");
-            foreach (var d in linterDiags)
-                AnsiConsole.MarkupLine($"  [yellow]{d}[/]");
+            var linter = new PboLinter();
+            var linterDiags = linter.Lint(pbo);
+            if (linterDiags.Count > 0)
+            {
+                t.AddRow(new Markup(""));
+                t.AddRow(new Markup($"  [orange1]Validation issues:[/]"));
+                foreach (var d in linterDiags)
+                    t.AddRow(new Markup($"    [orange1]{Terminal.MarkupEncode(d.ToString())}[/]"));
+            }
+            else
+            {
+                t.AddRow(new Markup(""));
+                t.AddRow(new Markup($"  [green]✔ No validation issues[/]"));
+            }
         }
-        else
+        catch (Exception ex)
         {
-            AnsiConsole.MarkupLine("[green]No issues found.[/]");
+            t.AddRow(new Markup($"  [red]Validation error: {Terminal.MarkupEncode(ex.Message)}[/]"));
         }
-    }
-    catch (Exception ex)
-    {
-        AnsiConsole.MarkupLine($"[red]Validation error: {ex.Message}[/]");
-    }
+    });
 }
 
 static int HandleFmtSqf(string path, bool check)
@@ -1414,7 +1509,7 @@ static int HandleFmtSqf(string path, bool check)
             totalChanged++;
             if (check)
             {
-                AnsiConsole.MarkupLine($"[yellow]{file}: would reformat[/]");
+                Terminal.Warning($"{Terminal.MarkupEncode(file)}: would reformat");
             }
             else
             {
@@ -1424,37 +1519,32 @@ static int HandleFmtSqf(string path, bool check)
     }
 
     if (files.Length > 1)
-    {
-        AnsiConsole.Progress()
-            .Start(ctx =>
+        Terminal.Progress($"Formatting {files.Length} SQF files...", files.Length, task =>
+        {
+            foreach (var file in files)
             {
-                var task = ctx.AddTask($"Formatting {files.Length} SQF files...", new ProgressTaskSettings { MaxValue = files.Length });
-                foreach (var file in files)
-                {
-                    ProcessOne(file);
-                    task.Increment(1);
-                }
-            });
-    }
+                ProcessOne(file);
+                task.Increment(1);
+            }
+        });
     else
-    {
         foreach (var file in files) ProcessOne(file);
-    }
     sw.Stop();
 
+    var duration = $"{sw.ElapsedMilliseconds / 1000.0:F1}s";
     if (check)
     {
         if (anyChanged)
-            AnsiConsole.MarkupLine($"\n[red]{files.Length} file(s) checked, {totalChanged} would reformat in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+            Terminal.ErrorCard("SQF Format (check)", $"{files.Length} file(s) checked, {totalChanged} would reformat in {duration}");
         else
-            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) checked, all files are clean in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+            Terminal.SuccessCard("SQF Format (check)", $"{files.Length} file(s) checked, all files are clean in {duration}");
     }
     else
     {
         if (anyChanged)
-            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) processed, {totalChanged} reformatted in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+            Terminal.SuccessCard("SQF Format", $"{files.Length} file(s) processed, {totalChanged} reformatted in {duration}");
         else
-            AnsiConsole.MarkupLine($"\n[green]{files.Length} file(s) processed, all clean in {sw.ElapsedMilliseconds / 1000.0:F1}s.[/]");
+            Terminal.SuccessCard("SQF Format", $"{files.Length} file(s) processed, all clean in {duration}");
     }
     return anyChanged ? 1 : 0;
 }
@@ -1465,5 +1555,10 @@ static void HandleConfigSerialize(string path, FileInfo output)
     var config = parser.ParseFile(path);
     using var stream = File.Create(output.FullName);
     ConfigSerializer.Serialize(config, stream);
-    AnsiConsole.MarkupLine($"[green]Serialized config to {output.FullName}[/]");
+
+    Terminal.Card("config serialize", t =>
+    {
+        t.AddRow(new Markup($"  [bold grey]Source:[/]  {Terminal.MarkupEncode(path)}"));
+        t.AddRow(new Markup($"  [bold grey]Output:[/] [green]{Terminal.MarkupEncode(output.FullName)}[/]"));
+    });
 }

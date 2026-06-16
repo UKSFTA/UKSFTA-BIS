@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using BIS.Core;
 using BIS.P3D.Export;
 
 internal static class BlenderHelper
@@ -21,7 +22,7 @@ internal static class BlenderHelper
         outputDir = Path.GetFullPath(outputDir);
         string texturesDir = Path.Combine(outputDir, "_textures");
         int texCount = BlenderExport.ExportAll(extractedDir, texturesDir);
-        Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
+        Terminal.Info($"Converted {texCount} PAA texture(s) to PNG for Blender");
 
         // Generate batch scripts (each handles multiple models in a single Blender session)
         int cpuCount = Environment.ProcessorCount;
@@ -30,7 +31,7 @@ internal static class BlenderHelper
 
         if (batchScripts.Count == 0)
         {
-            Console.WriteLine("  No batch scripts generated. Skipping Blender export.");
+            Terminal.Warning("No batch scripts generated. Skipping Blender export.");
             return 0;
         }
 
@@ -49,8 +50,11 @@ internal static class BlenderHelper
                 {
                     completed++;
                     if (ok) successCount++;
-                    var status = ok ? "OK" : "FAILED";
-                    Console.WriteLine($"  [{completed}/{batchScripts.Count}] {status} {Path.GetFileName(script)}");
+                var status = ok ? "OK" : "FAILED";
+                if (ok)
+                    Terminal.Success($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
+                else
+                    Terminal.Error($"  [{completed}/{batchScripts.Count}] {status}  {Path.GetFileName(script)}");
                 }
                 return ok;
             }
@@ -61,7 +65,7 @@ internal static class BlenderHelper
         });
 
         await Task.WhenAll(tasks);
-        Console.WriteLine($"  Blender export complete: {successCount}/{batchScripts.Count} batch(s) exported to {outputDir}");
+        Terminal.Success($"Blender export complete: {successCount}/{batchScripts.Count} batch(s) exported to {Terminal.MarkupEncode(outputDir)}");
         return successCount;
     }
 
@@ -98,11 +102,11 @@ internal static class BlenderHelper
         string texturesDir = Path.Combine(outputDir, "_textures");
         Directory.CreateDirectory(texturesDir);
         int texCount = BlenderExport.ExportAll(extractRoot, texturesDir);
-        Console.WriteLine($"  Converted {texCount} PAA texture(s) to PNG for Blender");
+        Terminal.Info($"Converted {texCount} PAA texture(s) to PNG for Blender");
 
         // Generate single-model batch script
         string scriptPath = BlenderExport.GenerateSingleModelScript(p3dPath, extractRoot, outputDir, texturesDir, modelCfgPath);
-        Console.WriteLine($"  Generated script: {Path.GetFileName(scriptPath)}");
+        Terminal.Info($"Generated script: {Path.GetFileName(scriptPath)}");
 
         // Run Blender
         return await RunBatchImportAsync(scriptPath, outputDir);
@@ -136,8 +140,8 @@ internal static class BlenderHelper
         string? blenderPath = ResolveBlenderPath();
         if (blenderPath == null)
         {
-            Console.WriteLine("  Blender executable not found. Install Blender.");
-            Console.WriteLine($"  Run manually: blender --background --python \"{scriptPath}\"");
+            Terminal.Warning("Blender executable not found. Install Blender.");
+            Terminal.Info($"Run manually: blender --background --python \"{scriptPath}\"");
             return false;
         }
 
@@ -161,7 +165,7 @@ internal static class BlenderHelper
             if (!exited)
             {
                 process.Kill(entireProcessTree: true);
-                Console.WriteLine($"  [{Path.GetFileNameWithoutExtension(scriptPath)}] timed out after {timeoutMinutes} minutes");
+                Terminal.Warning($"[{Path.GetFileNameWithoutExtension(scriptPath)}] timed out after {timeoutMinutes} minutes");
                 return false;
             }
 
@@ -175,8 +179,9 @@ internal static class BlenderHelper
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"  [{Path.GetFileNameWithoutExtension(scriptPath)}] failed: {ex.Message}");
+            Terminal.Error($"[{Path.GetFileNameWithoutExtension(scriptPath)}] failed: {ex.Message}");
             return false;
         }
     }
+
 }

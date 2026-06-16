@@ -13,7 +13,7 @@ namespace BIS.P3D.ODOL
         public uint AppID { get; private set; }
         public string MuzzleFlash { get; private set; }
         public byte[] Extra { get; private set; }
-        public LOD[] Lods { get; private set; }
+        public LOD[] Lods { get; set; }
         public Animations Animations { get; private set; }
 
         public void Read(BinaryReaderEx input)

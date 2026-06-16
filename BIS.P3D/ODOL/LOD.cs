@@ -40,14 +40,20 @@ namespace BIS.P3D.ODOL
             BMax = new Vector3P(input);
             BCenter = new Vector3P(input);
             BRadius = input.ReadSingle();
+            Console.Error.WriteLine($"[LOD-READ] after_bounds: {input.Position} (st={st})");
             Textures = input.ReadStringArray();
+            Console.Error.WriteLine($"[LOD-READ] after_textures: {input.Position}");
             Materials = input.ReadArray(i => new EmbeddedMaterial(i));
+            Console.Error.WriteLine($"[LOD-READ] after_materials: {input.Position}");
 
             PointToVertex = ReadCompressedVertexIndexArray(input, version);
             VertexToPoint = ReadCompressedVertexIndexArray(input, version);
+            Console.Error.WriteLine($"[LOD-READ] after_p2v_v2p: {input.Position}");
             Polygons = new Polygons(input, version);
+            Console.Error.WriteLine($"[LOD-READ] after_polygons: {input.Position}");
 
             Sections = input.ReadArray(i => new Section(i, version));
+            Console.Error.WriteLine($"[LOD-READ] after_sections: {input.Position}");
             NamedSelections = input.ReadArray(i => new NamedSelection(i, version));
             _selections = NamedSelections.Select(ns => ns.Name).ToArray();
             _proxies = RawProxies.Select(p =>
@@ -55,6 +61,7 @@ namespace BIS.P3D.ODOL
                     ? NamedSelections[p.NamedSelectionIndex].Name
                     : null).Where(n => n != null).ToArray();
             NamedProperties = input.ReadArray(i => new Tuple<string, string>(i.ReadAsciiz(), i.ReadAsciiz()));
+            Console.Error.WriteLine($"[LOD-READ] after_named_properties: {input.Position}");
 
 
             Frames = input.ReadArray(i => new Keyframe(i, version));
@@ -66,6 +73,7 @@ namespace BIS.P3D.ODOL
             var sizeOfRestDataPos = input.Position;
 
             var sizeOfRestData = input.ReadUInt32();
+            Console.Error.WriteLine($"[LOD-READ] after_rest_header(pos={input.Position}, size={sizeOfRestData}): {input.Position}");
 
             if (version >= 50u)
             {
@@ -74,6 +82,7 @@ namespace BIS.P3D.ODOL
 
             var uvset0 = new UVSet(input, version);
             var uvSetCount = Math.Max(1u, input.ReadUInt32());
+            Console.Error.WriteLine($"[LOD-READ] after_uvset({uvSetCount}): {input.Position}");
             UvSets = new UVSet[uvSetCount];
             UvSets[0] = uvset0;
             for (int i = 1; i < UvSets.Length; ++i)
@@ -82,10 +91,12 @@ namespace BIS.P3D.ODOL
             }
 
             Vertices = input.ReadCompressedArrayTracked(i => new Vector3P(i), 12);
+            Console.Error.WriteLine($"[LOD-READ] after_vertices: {input.Position}");
 
             if (version >= 45u)
             {
                 NormalsCompressed = input.ReadCondensedArrayTracked(i => new Vector3PCompressed(i), 4);
+                Console.Error.WriteLine($"[LOD-READ] after_normals: {input.Position}");
                 STCoordsCompressed = input.ReadCompressedArrayTracked(i => new Tuple<Vector3PCompressed, Vector3PCompressed>(new Vector3PCompressed(i), new Vector3PCompressed(i)), 8);
             }
             else

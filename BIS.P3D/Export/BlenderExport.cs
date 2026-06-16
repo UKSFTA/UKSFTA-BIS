@@ -759,9 +759,7 @@ namespace BIS.P3D.Export
             writer.WriteLine("            is_proxy = False");
             writer.WriteLine();
             writer.WriteLine("            if mat.name.startswith('P3D: '):");
-            writer.WriteLine("                if 'no material' in mat.name.lower():");
-            writer.WriteLine("                    is_proxy = True");
-            writer.WriteLine("                elif ' :: ' in mat.name:");
+            writer.WriteLine("                if ' :: ' in mat.name:");
             writer.WriteLine("                    parts = mat.name.split(' :: ', 1)");
             writer.WriteLine("                    color_ref = parts[0].replace('P3D: ', '').strip()");
             writer.WriteLine("                    tex_name = os.path.splitext(ntpath.basename(color_ref))[0]");

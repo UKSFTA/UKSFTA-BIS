@@ -146,7 +146,7 @@ Architecture overview and format coverage table: [docs/Home.md](docs/Home.md)
 > `docs/` is a Git submodule pointing to the [repository wiki](https://github.com/UKSFTA/UKSFTA-BIS/wiki).
 > To update it locally: `git submodule update --init docs`
 
-## 🏗 Architectural Overview
+## Architectural Overview
 
 The library is organized into 14 library projects plus test and utility projects:
 
@@ -170,7 +170,7 @@ The library is organized into 14 library projects plus test and utility projects
 | `BIS.CLI` | `bis` CLI tool: lint, format, pack, convert, inspect |
 | `BIS.IntegrationTest` | Cross-format integration tests against real game data |
 
-## 🛠 CLI Tool (`bis`)
+## CLI Tool (`bis`)
 
 The `bis` CLI provides all library functionality from the command line:
 
@@ -214,7 +214,7 @@ bis paa suggest texture.paa
 
 All `lint` commands support `--json` for structured output and `--exit-code` for CI pipelines.
 
-## 🔍 Linting Overview
+## Linting Overview
 
 The library ships four format-specific linters that replicate HEMTT's lint rule set:
 
@@ -284,7 +284,7 @@ The library ships four format-specific linters that replicate HEMTT's lint rule 
 | PW1 | Warning | Unused `#define` macro |
 | PW2 | Warning | Missing `#include` file |
 
-## ✨ SQF Formatting
+## SQF Formatting
 
 `bis fmt sqf` auto-formats SQF scripts with consistent style. Configurable options:
 
@@ -302,7 +302,7 @@ bis fmt sqf source/ --check
 bis fmt sqf source/
 ```
 
-## 🤖 CI / CD
+## CI / CD
 
 Three focused GitHub Actions workflows replace a former monolithic pipeline:
 
@@ -310,11 +310,11 @@ Three focused GitHub Actions workflows replace a former monolithic pipeline:
 * **test.yml** — Test on both platforms with XPlat Code Coverage upload to Codecov.
 * **lint.yml** — Parallel linting: ShellCheck on bash scripts, PSScriptAnalyzer on PowerShell, and `dotnet format --verify-no-changes`.
 
-## ⚖ License
+## Licence
 
 This project is licensed under the **MIT License**. See the `LICENSE` file for full details.
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 This library builds upon work from two upstream projects:
 

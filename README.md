@@ -1,71 +1,78 @@
 # UKSFTA-BIS
 
-**ArmA File Format Library for the UKSFTA development pipeline.**
+Arma file format library for the UKSFTA development pipeline.
 
 [![Build](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/build.yml?label=build&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/build.yml)
 [![Tests](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/test.yml?label=tests&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/test.yml)
 [![Lint](https://img.shields.io/github/actions/workflow/status/UKSFTA/UKSFTA-BIS/lint.yml?label=lint&logo=github)](https://github.com/UKSFTA/UKSFTA-BIS/actions/workflows/lint.yml)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Licence](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4)](https://dotnet.microsoft.com/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows-lightgrey)](.github/workflows)
 
-A centralized, cross-platform library providing high-performance reading, manipulation, and serialization for common Bohemia Interactive file formats across multiple Arma generations (Cold War Crisis through Reforger). This library is the foundational core for the UKSFTA mod suite, enabling robust model forensics, auditing, and automated processing.
+Cross-platform library providing reading, manipulation, and serialisation
+for common Bohemia Interactive file formats across multiple Arma generations
+(Cold War Crisis through Reforger). Foundational core for the UKSFTA mod
+suite, enabling model forensics, auditing, and automated processing.
 
-## 🚀 Key Features
+## Key Features
 
-*   **Comprehensive Format Support**:
-    *   **P3D (ODOL/MLOD)**: Full parsing and conversion for models (v73–v75).
-    *   **PBO**: Archive management, extraction, validation, and obfuscation reversal.
-    *   **PAA/PAC**: Texture conversion and manipulation (+ standalone encoder).
-    *   **EBO**: Enfusion Binary Object (Reforger) format.
-    *   **PAK**: Enfusion PAK archive format (Reforger / DayZ).
-    *   **RTM**: Skeletal animation data extraction.
-    *   **SQFC**: Compiled SQF script analysis.
-    *   **WRP/OPRW**: World configuration and terrain object parsing.
-    *   **ALB**: Bytecode analysis for Arma scripting.
-    *   **BISign**: Public-key signature and bikey handling.
-*   **Modernized Infrastructure**:
-    *   **Target**: .NET 10.0 (C#) for high-performance and cross-platform reliability.
-    *   **Cross-Platform**: Verified build/test support for Linux and Windows.
-*   **Developer Optimized**:
-    *   Modular namespace architecture for targeted dependency management.
-    *   Integrated unit + integration test suite with graceful data-skipping.
-    *   CI with separate build, test, and lint workflows.
+- **Comprehensive Format Support**:
+  - **P3D (ODOL/MLOD)**: Full parsing and conversion for models (v73-v75).
+  - **PBO**: Archive management, extraction, validation, and obfuscation reversal.
+  - **PAA/PAC**: Texture conversion and manipulation (+ standalone encoder).
+  - **EBO**: Enfusion Binary Object (Reforger) format.
+  - **PAK**: Enfusion PAK archive format (Reforger / DayZ).
+  - **RTM**: Skeletal animation data extraction.
+  - **SQFC**: Compiled SQF script analysis.
+  - **WRP/OPRW**: World configuration and terrain object parsing.
+  - **ALB**: Bytecode analysis for Arma scripting.
+  - **BISign**: Public-key signature and bikey handling.
+- **Modern Infrastructure**:
+  - **Target**: .NET 10.0 (C#) for cross-platform reliability.
+  - **Cross-Platform**: Verified build/test support for Linux and Windows.
+- **Developer Optimised**:
+  - Modular namespace architecture for targeted dependency management.
+  - Integrated unit and integration test suite with graceful data-skipping.
+  - CI with separate build, test, and lint workflows.
 
-## 🗂 Format Coverage by Game
+## Format Coverage by Game
 
 | Format | Cold War Crisis | Arma 1 | Arma 2 | Arma 3 | Reforger |
 |---|---|---|---|---|---|
-| PBO | ✓ | ✓ | ✓ | ✓ | |
-| P3D (ODOL) | | ✓ | ✓ | ✓ | |
-| PAA | | ✓ | ✓ | ✓ | |
-| RTM | | ✓ | ✓ | ✓ | |
-| WRP | | ✓ | ✓ | ✓ | |
-| SQFC | | | | ✓ | |
-| EBO | | | | | ✓ |
-| PAK | | | | | ✓ |
-| ALB | | | | ✓ | |
-| BISign | | | | ✓ | ✓ |
+| PBO | Yes | Yes | Yes | Yes | |
+| P3D (ODOL) | | Yes | Yes | Yes | |
+| PAA | | Yes | Yes | Yes | |
+| RTM | | Yes | Yes | Yes | |
+| WRP | | Yes | Yes | Yes | |
+| SQFC | | | | Yes | |
+| EBO | | | | | Yes |
+| PAK | | | | | Yes |
+| ALB | | | | Yes | |
+| BISign | | | | Yes | Yes |
 
-## 🔍 PBO Deobfuscation
+## PBO Deobfuscation
 
-The `BIS.PBO.Deobfuscator` library provides specialized profiles for recovering
-PBO files that use non-standard or obfuscated structures where standard tools
-may fail:
+The `BIS.PBO.Deobfuscator` library provides specialised profiles for
+recovering PBO files that use non-standard or obfuscated structures:
 
-1. **ModularSuffixRecoveryProfile** — handles Cyrillic-based renaming and decoy injection via multiple detection modules.
-2. **HeuristicFallbackProfile** — catch-all that detects structural anomalies (e.g. high small-file ratios, unusual naming density).
-3. **Legacy Profiles** (SuffixRecoveryProfile, DecoyInjectionProfile) — targeted profiles for specific obfuscation variants.
+1. **ModularSuffixRecoveryProfile**: Handles Cyrillic-based renaming and
+   decoy injection via multiple detection modules.
+2. **HeuristicFallbackProfile**: Catch-all that detects structural anomalies
+   (high small-file ratios, unusual naming density).
+3. **Legacy Profiles** (SuffixRecoveryProfile, DecoyInjectionProfile):
+   Targeted profiles for specific obfuscation variants.
 
 > The [UKSFTA-P3D](https://github.com/UKSFTA/UKSFTA-P3D) project provides a
-> P3D debinariser (ODOL → MLOD converter) using this library.
+> P3D debinariser (ODOL to MLOD converter) using this library.
 
-## 🛠 Setup & Development
+## Setup and Development
 
 ### Prerequisites
+
 - .NET 10.0 SDK
 
 ### Clone
+
 ```bash
 git clone --recurse-submodules git@github.com:UKSFTA/UKSFTA-BIS.git
 # or if already cloned:
@@ -73,6 +80,7 @@ git submodule update --init docs
 ```
 
 ### Build
+
 ```bash
 # Linux / macOS
 ./build.sh
@@ -82,6 +90,7 @@ dotnet build
 ```
 
 ### Test
+
 ```bash
 # Full test suite (all modules)
 ./dev.sh test
@@ -91,6 +100,7 @@ dotnet test
 ```
 
 ### Test Data (Integration Tests)
+
 Some tests exercise real Arma format files and will skip gracefully if test
 data is not present. To download a minimal set of ALDP test packages:
 
@@ -102,10 +112,11 @@ data is not present. To download a minimal set of ALDP test packages:
 .\_testdata\download.ps1
 ```
 
-See [`_testdata/README.md`](_testdata/README.md) for details on symlinking your
-local game installation for broader format coverage.
+See [`_testdata/README.md`](_testdata/README.md) for details on symlinking
+your local game installation for broader format coverage.
 
 ### Lint
+
 The CI pipeline runs these checks. You can run them locally as well:
 
 ```bash
@@ -119,10 +130,10 @@ shellcheck _testdata/download.sh build.sh dev.sh
 Invoke-ScriptAnalyzer -Path _testdata/download.ps1
 ```
 
-## 📚 Module Documentation
+## Module Documentation
 
-Detailed documentation for each module, including format background, key types,
-usage examples, and test data expectations:
+Detailed documentation for each module, including format background, key
+types, usage examples, and test data expectations:
 
 | Module | Format | Doc |
 |---|---|---|
@@ -143,17 +154,19 @@ usage examples, and test data expectations:
 
 Architecture overview and format coverage table: [docs/Home.md](docs/Home.md)
 
-> `docs/` is a Git submodule pointing to the [repository wiki](https://github.com/UKSFTA/UKSFTA-BIS/wiki).
+> `docs/` is a Git submodule pointing to the
+> [repository wiki](https://github.com/UKSFTA/UKSFTA-BIS/wiki).
 > To update it locally: `git submodule update --init docs`
 
 ## Architectural Overview
 
-The library is organized into 14 library projects plus test and utility projects:
+The library is organised into 14 library projects plus test and utility
+projects:
 
 | Project | Description |
 |---|---|
 | `BIS.Core` | Shared utilities, compression (LZSS/LZO), stream handling |
-| `BIS.P3D` | ODOL/MLOD model parsing, conversion (v73–v75) |
+| `BIS.P3D` | ODOL/MLOD model parsing, conversion (v73-v75) |
 | `BIS.PBO` | PBO archive structure, entry management, extraction |
 | `BIS.PBO.Deobfuscator` | Obfuscation reversal profiles for non-standard PBOs |
 | `BIS.PAA` | PAA/PAC texture pixel format decoding |
@@ -170,7 +183,7 @@ The library is organized into 14 library projects plus test and utility projects
 | `BIS.CLI` | `bis` CLI tool: lint, format, pack, convert, inspect |
 | `BIS.IntegrationTest` | Cross-format integration tests against real game data |
 
-## CLI Tool (`bis`)
+## CLI Tool
 
 The `bis` CLI provides all library functionality from the command line:
 
@@ -199,7 +212,7 @@ bis pbo list archive.pbo
 bis pbo extract archive.pbo -o output/
 bis pbo pack source/ -o output.pbo -p my_prefix -c
 
-# Config serialization
+# Config serialisation
 bis config serialize config.cpp -o output.txt
 
 # Inspect models
@@ -207,59 +220,64 @@ bis p3d info model.p3d
 bis p3d validate model.p3d
 bis p3d convert model.p3d -o converted.mlod
 
-# Analyze textures
+# Analyse textures
 bis paa analyze texture.paa
 bis paa suggest texture.paa
 ```
 
-All `lint` commands support `--json` for structured output and `--exit-code` for CI pipelines.
+All `lint` commands support `--json` for structured output and `--exit-code`
+for CI pipelines.
 
 ## Linting Overview
 
-The library ships four format-specific linters that replicate HEMTT's lint rule set:
+The library ships four format-specific linters that replicate HEMTT's lint
+rule set:
 
 ### Config Linter (L-Cxx) — 12 rules
+
 | Rule | Severity | Description | Fix |
 |---|---|---|---|
-| L-C02 | Error | Duplicate property | — |
-| L-C03 | Error | Duplicate class | — |
-| L-C04 | Error | Missing external base class | ✓ |
-| L-C05 | Warning | External parent case mismatch | ✓ |
-| L-C07 | Error | Expected `[]` array suffix on array value | — |
-| L-C09 | Error | Missing magazine in CfgMagazineWells | — |
-| L-C11 | Warning | Unusual file extension on property | — |
-| L-C12 | Help | Quoted math could be unquoted | ✓ |
-| L-C13 | Help | Unnecessary `_this call` in callback | ✓ |
-| L-C14 | Warning | Unused extern class declaration | ✓ |
-| L-C15 | Warning | CfgPatches references missing class | — |
-| L-C16 | Warning | File reference starts with path separator | — |
+| L-C02 | Error | Duplicate property | -- |
+| L-C03 | Error | Duplicate class | -- |
+| L-C04 | Error | Missing external base class | Yes |
+| L-C05 | Warning | External parent case mismatch | Yes |
+| L-C07 | Error | Expected `[]` array suffix on array value | -- |
+| L-C09 | Error | Missing magazine in CfgMagazineWells | -- |
+| L-C11 | Warning | Unusual file extension on property | -- |
+| L-C12 | Help | Quoted math could be unquoted | Yes |
+| L-C13 | Help | Unnecessary `_this call` in callback | Yes |
+| L-C14 | Warning | Unused extern class declaration | Yes |
+| L-C15 | Warning | CfgPatches references missing class | -- |
+| L-C16 | Warning | File reference starts with path separator | -- |
 
 ### SQF Linter (L-Sxx) — 20 rules
+
 | Rule | Severity | Description | Fix |
 |---|---|---|---|
-| L-S01 | Warning | Tab character in source | ✓ |
-| L-S02 | Warning | Inconsistent indentation (mixed tabs+spaces) | — |
-| L-S04 | Help | Wrong command casing | ✓ |
-| L-S05 | Error | Assignment in `if`/`while` condition (use `==`) | ✓ |
-| L-S06 | Help | `find` result compared with `> -1` (use `>= 0`) | — |
-| L-S11 | Help | `if (!x) then { ... } else` (swap branches) | — |
-| L-S12 | Warning | Unused local variable | — |
-| L-S13 | Warning | Unused parameter | — |
-| L-S14 | Warning | Variable shadows outer scope declaration | — |
-| L-S15 | Warning | Unused assignment (value overwritten before read) | — |
-| L-S16 | Warning | Missing `private` on local variable | ✓ |
-| L-S17 | Help | All-caps local variable (use lowercase) | ✓ |
-| L-S18 | Warning | Vehicle check with `isNull` instead of `isNull objectParent` | — |
-| L-S19 | Help | Extra `!` negation | ✓ |
-| L-S20 | Warning | Boolean comparison with `== true`/`== false` | ✓ |
-| L-S21 | Error | Impossible range comparison (`_x < 5 && _x > 10`) | — |
-| L-S23 | Warning | Reassigning reserved variable | — |
-| L-S24 | Warning | Magic number literal (except 0/1/-1/100/255) | — |
-| L-S25 | Help | `count == 0` (use `isEqualTo []`) | ✓ |
-| L-S27 | Help | `select count _x - 1` (use `select -1`) | ✓ |
-| L-S36 | Error | Global variable declared with `private` | ✓ |
+| L-S01 | Warning | Tab character in source | Yes |
+| L-S02 | Warning | Inconsistent indentation (mixed tabs+spaces) | -- |
+| L-S04 | Help | Wrong command casing | Yes |
+| L-S05 | Error | Assignment in `if`/`while` condition (use `==`) | Yes |
+| L-S06 | Help | `find` result compared with `> -1` (use `>= 0`) | -- |
+| L-S11 | Help | `if (!x) then { ... } else` (swap branches) | -- |
+| L-S12 | Warning | Unused local variable | -- |
+| L-S13 | Warning | Unused parameter | -- |
+| L-S14 | Warning | Variable shadows outer scope declaration | -- |
+| L-S15 | Warning | Unused assignment (value overwritten before read) | -- |
+| L-S16 | Warning | Missing `private` on local variable | Yes |
+| L-S17 | Help | All-caps local variable (use lowercase) | Yes |
+| L-S18 | Warning | Vehicle check with `isNull` instead of `isNull objectParent` | -- |
+| L-S19 | Help | Extra `!` negation | Yes |
+| L-S20 | Warning | Boolean comparison with `== true`/`== false` | Yes |
+| L-S21 | Error | Impossible range comparison (`_x < 5 && _x > 10`) | -- |
+| L-S23 | Warning | Reassigning reserved variable | -- |
+| L-S24 | Warning | Magic number literal (except 0/1/-1/100/255) | -- |
+| L-S25 | Help | `count == 0` (use `isEqualTo []`) | Yes |
+| L-S27 | Help | `select count _x - 1` (use `select -1`) | Yes |
+| L-S36 | Error | Global variable declared with `private` | Yes |
 
 ### Stringtable Linter (L-Lxx) — 6 rules
+
 | Rule | Severity | Description |
 |---|---|---|
 | L-L01 | Warning | Keys not alphabetically sorted |
@@ -270,15 +288,17 @@ The library ships four format-specific linters that replicate HEMTT's lint rule 
 | L-L07 | Warning | Missing `Original` language |
 
 ### PBO Linter (L-Pxx) — 5 rules
+
 | Rule | Severity | Description |
 |---|---|---|
 | L-P01 | Error | Duplicate file entries |
-| L-P02 | Warning | Obfuscated entry name (raw ≠ sanitized) |
+| L-P02 | Warning | Obfuscated entry name (raw does not equal sanitised) |
 | L-P03 | Warning | Missing or empty `prefix` property |
 | L-P04 | Warning | Empty PBO (no files) |
 | L-P05 | Warning | Zero timestamp on non-empty entry |
 
 ### Preprocessor (PWx) — 2 rules
+
 | Rule | Severity | Description |
 |---|---|---|
 | PW1 | Warning | Unused `#define` macro |
@@ -286,7 +306,8 @@ The library ships four format-specific linters that replicate HEMTT's lint rule 
 
 ## SQF Formatting
 
-`bis fmt sqf` auto-formats SQF scripts with consistent style. Configurable options:
+`bis fmt sqf` auto-formats SQF scripts with consistent style. Configurable
+options:
 
 | Option | Default | Description |
 |---|---|---|
@@ -302,25 +323,33 @@ bis fmt sqf source/ --check
 bis fmt sqf source/
 ```
 
-## CI / CD
+## CI/CD
 
-Three focused GitHub Actions workflows replace a former monolithic pipeline:
+Three GitHub Actions workflows:
 
-* **build.yml** — Restore + Build on ubuntu and windows (push/PR to main, tags, manual).
-* **test.yml** — Test on both platforms with XPlat Code Coverage upload to Codecov.
-* **lint.yml** — Parallel linting: ShellCheck on bash scripts, PSScriptAnalyzer on PowerShell, and `dotnet format --verify-no-changes`.
+- **build.yml**: Restore and Build on ubuntu and windows (push/PR to main,
+  tags, manual).
+- **test.yml**: Test on both platforms with XPlat Code Coverage upload to
+  Codecov.
+- **lint.yml**: Parallel linting: ShellCheck on bash scripts,
+  PSScriptAnalyzer on PowerShell, and `dotnet format --verify-no-changes`.
 
 ## Licence
 
-This project is licensed under the **MIT License**. See the `LICENSE` file for full details.
+This project is licensed under the **MIT Licence**. See the `LICENSE` file
+for full details.
 
 ## Acknowledgements
 
 This library builds upon work from two upstream projects:
 
-- **[jetelain/bis-file-formats](https://github.com/jetelain/bis-file-formats)** — The fork this repository was originally derived from, containing the most up-to-date format parsers.
-- **[Braini01/bis-file-formats](https://github.com/Braini01/bis-file-formats)** — The original upstream project that laid the foundation for many of the format implementations.
+- **[jetelain/bis-file-formats](https://github.com/jetelain/bis-file-formats)**:
+  The fork this repository was originally derived from, containing the most
+  up-to-date format parsers.
+- **[Braini01/bis-file-formats](https://github.com/Braini01/bis-file-formats)**:
+  The original upstream project that laid the foundation for many of the
+  format implementations.
 
-The project code has been heavily modified from its upstream origins; all
-`<Authors>` metadata in `.csproj` files now reflects **UKSFTA** as the
-current maintainer.
+The project code has been heavily modified from its upstream origins. All
+`<Authors>` metadata in `.csproj` files reflects **UKSFTA** as the current
+maintainer.
